@@ -29,15 +29,6 @@ def main():
                         type=str, default=None,
                         help="ICC profile to embed in final TIFF export.")
     # image modifiers
-    parser.add_argument('--red-balance', '-r',
-                        type=float, default=1.0,
-                        help="Multiplier for red channel (pre-inversion).")
-    parser.add_argument('--green-balance', '-g',
-                        type=float, default=1.0,
-                        help="Multiplier for blue channel (pre-inversion).")
-    parser.add_argument('--blue-balance', '-b',
-                        type=float, default=1.0,
-                        help="Multiplier for green channel (pre-inversion).")
     parser.add_argument('--analysis-width', '-W',
                         type=int, default=5000,
                         help="Size of analysis bounding box (width).")
@@ -48,7 +39,7 @@ def main():
                         type=float, default=0.0,
                         help="Black point correction safety margin (lift)")
     parser.add_argument('--exposure-comp',
-                        type=float, default=1.0,
+                        type=float, default=0.7,
                         help="Apply post-inversion exposure compensation.")
     parser.add_argument('--skip-inversion',
                         action='store_true',
@@ -59,6 +50,9 @@ def main():
     parser.add_argument('--debug-analysis-region',
                         action='store_true',
                         help="Show bounds of analysis region.")
+    parser.add_argument('--wb-steps', '-S',
+                        type=int, default=6,
+                        help="Number of times to re-balance around mid-gray.")
     args = parser.parse_args()
 
 
@@ -163,45 +157,46 @@ def main():
                                           blue_channel_auto],
                                          axis=2)
                 # find spot closest to middle gray for density adjustment
-                # update analysis region from current working image
-                analysis_region_post = working_image[analysis_start_y:analysis_end_y,
-                                                     analysis_start_x:analysis_end_x]
-                # normalize image data
-                post_lum_values = np.dot(analysis_region_post,
-                                         rec2020_lum_weights)
-                max_post_lum_y, max_post_lum_x = np.unravel_index(np.argmax(post_lum_values),
-                                                                  post_lum_values.shape)
-                max_post_lum_rgb_values = analysis_region_post[max_post_lum_y,
-                                                               max_post_lum_x]
-                normalization_factor = np.max(max_post_lum_rgb_values)
-                # re-assign to avoid overwiting working_image
-                # (analysis_region_post references working_image directly)
-                analysis_region_post = analysis_region_post / normalization_factor
-                post_lum_values_norm = np.dot(analysis_region_post,
-                                              rec2020_lum_weights)
-                # find the closest luminance point to 'middle gray'
-                mid_gray_idx = np.argmin(np.abs(post_lum_values_norm - 0.18))
-                mid_gray_y, mid_gray_x = np.unravel_index(mid_gray_idx,
-                                                          post_lum_values_norm.shape)
-                mid_gray_rgb_values = analysis_region_post[mid_gray_y,
-                                                           mid_gray_x]
-                print(f"INFO: Middle gray RGB values (normalized):\n"
-                      f"      RED:   {mid_gray_rgb_values[0]}\n"
-                      f"      GREEN: {mid_gray_rgb_values[1]}\n"
-                      f"      BLUE:  {mid_gray_rgb_values[2]}",
-                      file=sys.stderr)
-                # apply multiplications to channel densities to balance them
-                mid_gray_mult = np.max(mid_gray_rgb_values)
-                red_channel_mid_gray = working_image[:, :, 0].copy()
-                green_channel_mid_gray = working_image[:, :, 1].copy()
-                blue_channel_mid_gray = working_image[:, :, 2].copy()
-                red_channel_mid_gray += (mid_gray_mult - mid_gray_rgb_values[0]) * normalization_factor
-                green_channel_mid_gray += (mid_gray_mult - mid_gray_rgb_values[1]) * normalization_factor
-                blue_channel_mid_gray += (mid_gray_mult - mid_gray_rgb_values[2]) * normalization_factor
-                working_image = np.stack([red_channel_mid_gray,
-                                          green_channel_mid_gray,
-                                          blue_channel_mid_gray],
-                                         axis=2)
+                for i in range(args.wb_steps):
+                    # update analysis region from current working image
+                    analysis_region_post = working_image[analysis_start_y:analysis_end_y,
+                                                         analysis_start_x:analysis_end_x]
+                    # normalize image data
+                    post_lum_values = np.dot(analysis_region_post,
+                                             rec2020_lum_weights)
+                    max_post_lum_y, max_post_lum_x = np.unravel_index(np.argmax(post_lum_values),
+                                                                      post_lum_values.shape)
+                    max_post_lum_rgb_values = analysis_region_post[max_post_lum_y,
+                                                                   max_post_lum_x]
+                    normalization_factor = np.max(max_post_lum_rgb_values)
+                    # re-assign to avoid overwiting working_image
+                    # (analysis_region_post references working_image directly)
+                    analysis_region_post = analysis_region_post / normalization_factor
+                    post_lum_values_norm = np.dot(analysis_region_post,
+                                                  rec2020_lum_weights)
+                    # find the closest luminance point to 'middle gray'
+                    mid_gray_idx = np.argmin(np.abs(post_lum_values_norm - 0.18))
+                    mid_gray_y, mid_gray_x = np.unravel_index(mid_gray_idx,
+                                                              post_lum_values_norm.shape)
+                    mid_gray_rgb_values = analysis_region_post[mid_gray_y,
+                                                               mid_gray_x]
+                    print(f"INFO: Middle gray RGB values (normalized):\n"
+                          f"      RED:   {mid_gray_rgb_values[0]}\n"
+                          f"      GREEN: {mid_gray_rgb_values[1]}\n"
+                          f"      BLUE:  {mid_gray_rgb_values[2]}",
+                          file=sys.stderr)
+                    # apply adds and mults to channel densities to balance them
+                    mid_gray_mult = np.max(mid_gray_rgb_values)
+                    red_channel_mid_gray = working_image[:, :, 0].copy()
+                    green_channel_mid_gray = working_image[:, :, 1].copy()
+                    blue_channel_mid_gray = working_image[:, :, 2].copy()
+                    red_channel_mid_gray += (mid_gray_mult - mid_gray_rgb_values[0]) * normalization_factor
+                    green_channel_mid_gray += (mid_gray_mult - mid_gray_rgb_values[1]) * normalization_factor
+                    blue_channel_mid_gray += (mid_gray_mult - mid_gray_rgb_values[2]) * normalization_factor
+                    working_image = np.stack([red_channel_mid_gray,
+                                              green_channel_mid_gray,
+                                              blue_channel_mid_gray],
+                                             axis=2)
 
         # map density to luminance
         if not args.skip_inversion:
