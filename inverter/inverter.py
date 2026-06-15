@@ -17,13 +17,6 @@ def main():
                         help="Input RAW file to process.")
     parser.add_argument('output_path', type=str, default=None,
                         help="Output path for final processed image.")
-    # lut applications
-    parser.add_argument('--input-lut', '-l',
-                        type=str, default=None,
-                        help="1D LUT applied into working colour space.")
-    parser.add_argument('--output-lut', '-L',
-                        type=str, default=None,
-                        help="1D LUT applied out of working colour space.")
     # icc profile embedding
     parser.add_argument('--icc', '-p',
                         type=str, default=None,
@@ -39,7 +32,7 @@ def main():
                         type=float, default=0.0,
                         help="Black point correction safety margin (lift)")
     parser.add_argument('--exposure-comp',
-                        type=float, default=0.7,
+                        type=float, default=1.0,
                         help="Apply post-inversion exposure compensation.")
     parser.add_argument('--skip-inversion',
                         action='store_true',
@@ -67,6 +60,7 @@ def main():
 
     # read in raw file
     with rawpy.imread(args.image_path) as raw:
+        print(f"Processing image: {args.image_path} ...", file=sys.stderr)
         # read in camera sensor data at 16bpp int with D65 white balance
         d65_balance = raw.daylight_whitebalance
         image_data_uint16 = raw.postprocess(use_camera_wb=False,
@@ -78,13 +72,7 @@ def main():
                                             output_color=rawpy.ColorSpace.Rec2020)
 
         # convert data to 32-bit floating point
-        image_data_f32 = image_data_uint16.astype(np.float32) / 65535.0
-
-        # apply input lut (if present)
-        working_image = image_data_f32
-        if args.input_lut:
-            input_lut = colour.read_LUT(args.input_lut)
-            working_image = input_lut.apply(working_image)
+        working_image = image_data_uint16.astype(np.float32) / 65535.0
 
         # perform adjustments in working colour space
         rec2020_lum_weights = np.array([0.2627, 0.6780, 0.05903])
@@ -107,7 +95,7 @@ def main():
                                                     pre_lum_values.shape)
             # now grab the rgb values at that point
             max_rgb_values = analysis_region_pre[max_lum_y, max_lum_x]
-            print(f"INFO: Darkest values (pre-inversion):\n"
+            print(f"INFO: Brightest values (pre-inversion):\n"
                   f"      RED:   {max_rgb_values[0]}\n"
                   f"      GREEN: {max_rgb_values[1]}\n"
                   f"      BLUE:  {max_rgb_values[2]}",
@@ -119,6 +107,10 @@ def main():
             red_channel_wb *= wb_mult / max_rgb_values[0]
             green_channel_wb *= wb_mult / max_rgb_values[1]
             blue_channel_wb *= wb_mult / max_rgb_values[2]
+            # set to actual white point
+            # red_channel_wb /= wb_mult
+            # green_channel_wb /= wb_mult
+            # blue_channel_wb /= wb_mult
             working_image = np.stack([red_channel_wb,
                                       green_channel_wb,
                                       blue_channel_wb],
@@ -127,10 +119,6 @@ def main():
         # invert image directly
         if not args.skip_inversion:
             # we calculate density from "transmittance" using log10(1/x)
-            # TODO: normalize before applying 1D output lut
-            print("WARN: Inverting the image is based on density, and may\n"
-                  "      create values above 1.0 which break output LUTs.",
-                  file=sys.stderr)
             inverse_x_points = np.array([0.001, 0.25, 0.5, 0.75, 1.0])
             inverse_y_points = np.log10(1.0 / inverse_x_points)
             inverse_spline = scipy.interpolate.CubicSpline(inverse_x_points,
@@ -139,32 +127,6 @@ def main():
 
             # automatically determine min/max point for each channel
             if not args.skip_auto_adjustments:
-                # re-find black point
-                # update analysis region
-                analysis_region_post = working_image[analysis_start_y:analysis_end_y,
-                                                     analysis_start_x:analysis_end_x]
-                # find darkest luminance point
-                min_lum_values = np.dot(analysis_region_post, rec2020_lum_weights)
-                min_lum_y, min_lum_x = np.unravel_index(np.argmin(min_lum_values),
-                                                        min_lum_values.shape)
-                # now grab the rgb values at that point
-                min_rgb_values = analysis_region_post[min_lum_y, min_lum_x]
-                print(f"INFO: Darkest values (post-inversion):\n"
-                      f"      RED:   {min_rgb_values[0]}\n"
-                      f"      GREEN: {min_rgb_values[1]}\n"
-                      f"      BLUE:  {min_rgb_values[2]}",
-                      file=sys.stderr)
-                # add auto-adjustments (offset + density adjustment)
-                red_channel_auto = working_image[:, :, 0].copy()
-                green_channel_auto = working_image[:, :, 1].copy()
-                blue_channel_auto = working_image[:, :, 2].copy()
-                red_channel_auto -= min_rgb_values[0] - args.bp_margin
-                green_channel_auto -= min_rgb_values[1] - args.bp_margin
-                blue_channel_auto -= min_rgb_values[2] - args.bp_margin
-                working_image = np.stack([red_channel_auto,
-                                          green_channel_auto,
-                                          blue_channel_auto],
-                                         axis=2)
                 # find spot closest to middle gray for density adjustment
                 for i in range(args.wb_steps):
                     # update analysis region from current working image
@@ -189,7 +151,8 @@ def main():
                                                               post_lum_values_norm.shape)
                     mid_gray_rgb_values = analysis_region_post[mid_gray_y,
                                                                mid_gray_x]
-                    print(f"INFO: Middle gray RGB values (normalized):\n"
+                    print(f"INFO: (STEP {i+1} of {args.wb_steps}) "
+                          f"Middle gray RGB values (normalized):\n"
                           f"      RED:   {mid_gray_rgb_values[0]}\n"
                           f"      GREEN: {mid_gray_rgb_values[1]}\n"
                           f"      BLUE:  {mid_gray_rgb_values[2]}",
@@ -206,6 +169,34 @@ def main():
                                               green_channel_mid_gray,
                                               blue_channel_mid_gray],
                                              axis=2)
+
+        # apply an automated white balance based on white point
+        if not args.skip_auto_adjustments:
+            # update analysis region
+            analysis_region_wb = working_image[analysis_start_y:analysis_end_y,
+                                               analysis_start_x:analysis_end_x]
+            # find brightest luminance point and balance around it
+            wb_lum_values = np.dot(analysis_region_wb, rec2020_lum_weights)
+            max_wb_lum_y, max_wb_lum_x = np.unravel_index(np.argmax(wb_lum_values),
+                                                          wb_lum_values.shape)
+            max_wb_lum_rgb_values = analysis_region_wb[max_wb_lum_y,
+                                                       max_wb_lum_x]
+            print(f"INFO: Final white balance values:\n"
+                  f"      RED:   {max_wb_lum_rgb_values[0]}\n"
+                  f"      GREEN: {max_wb_lum_rgb_values[1]}\n"
+                  f"      BLUE:  {max_wb_lum_rgb_values[2]}",
+                  file=sys.stderr)
+            final_wb_mult = np.max(max_wb_lum_rgb_values)
+            red_channel_wb_final = working_image[:, :, 0].copy()
+            green_channel_wb_final = working_image[:, :, 1].copy()
+            blue_channel_wb_final = working_image[:, :, 2].copy()
+            red_channel_wb_final *= final_wb_mult / max_wb_lum_rgb_values[0]
+            green_channel_wb_final *= final_wb_mult / max_wb_lum_rgb_values[1]
+            blue_channel_wb_final *= final_wb_mult / max_wb_lum_rgb_values[2]
+            working_image = np.stack([red_channel_wb_final,
+                                      green_channel_wb_final,
+                                      blue_channel_wb_final],
+                                     axis=2)
 
         # apply a final, user-adjustable gain to balance in density space
         red_channel_ub = working_image[:, :, 0].copy() * args.red_balance
@@ -224,19 +215,8 @@ def main():
                                                        lum_y_points)
             working_image = lum_spline(working_image)
 
-        # apply output lut (if present)
-        final_image = working_image
-        if args.output_lut:
-            output_lut = colour.read_LUT(args.output_lut)
-            final_image = output_lut.apply(working_image)
-
-        # add output gain and black point adjustment
-        if not args.skip_auto_adjustments:
-            black_pt_idx = np.unravel_index(np.sum(final_image, axis=-1).argmin(),
-                                            final_image.shape[:2])
-            darkest_color = final_image[black_pt_idx]
-            final_image -= darkest_color
-        final_image *= args.exposure_comp
+        # apply output exposure compensation
+        final_image = working_image * args.exposure_comp
 
         if args.debug_analysis_region:
             final_image[analysis_start_y:analysis_start_y + 64,
@@ -266,6 +246,7 @@ def main():
                          compressionargs={"level":9},
                          predictor=3,
                          extratags=[icc_tag] if icc_tag else [])
+        print(f"Done processing {args.image_path}!", file=sys.stderr)
 
 
 if __name__ == "__main__":
