@@ -1,0 +1,15 @@
+# example preset file
+# order of all values is RGB, comma-separated
+# this example preset is based off a roll of 2026 Eastman Kodak Kodacolor 100
+# newlines are ignored, but order of adjustments is always the same:
+#     black_adjust;gray_adjust;white_adjust;custom_adjust
+# the last line does not need a semicolon, it is used only as a separator
+
+# black adjust
+0.3847257196903229,0.2238193303346634,0.13138018548488617;
+# gray adjust
+0.1701849951003388,0.143763470717083,0.19195623503637563;
+# white adjust
+1.3648128510932116,1.1430813231166987,1.0;
+# custom adjust
+1.0,1.0,1.03
