@@ -53,6 +53,15 @@ def main():
     parser.add_argument('--wb-steps', '-S',
                         type=int, default=6,
                         help="Number of times to re-balance around mid-gray.")
+    parser.add_argument('--red-balance', '-R',
+                        type=float, default=1.0,
+                        help="Custom red balance (in density space).")
+    parser.add_argument('--green-balance', '-G',
+                        type=float, default=1.0,
+                        help="Custom green balance (in density space).")
+    parser.add_argument('--blue-balance', '-B',
+                        type=float, default=1.0,
+                        help="Custom blue balance (in density space).")
     args = parser.parse_args()
 
 
@@ -197,6 +206,15 @@ def main():
                                               green_channel_mid_gray,
                                               blue_channel_mid_gray],
                                              axis=2)
+
+        # apply a final, user-adjustable gain to balance in density space
+        red_channel_ub = working_image[:, :, 0].copy() * args.red_balance
+        green_channel_ub = working_image[:, :, 1].copy() * args.green_balance
+        blue_channel_ub = working_image[:, :, 2].copy() * args.blue_balance
+        working_image = np.stack([red_channel_ub,
+                                  green_channel_ub,
+                                  blue_channel_ub],
+                                 axis=2)
 
         # map density to luminance
         if not args.skip_inversion:
