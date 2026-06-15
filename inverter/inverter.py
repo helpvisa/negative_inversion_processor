@@ -3,7 +3,6 @@ import argparse
 import numpy as np
 import rawpy
 import tifffile
-import scipy as sci
 import colour
 
 
