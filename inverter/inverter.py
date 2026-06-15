@@ -81,6 +81,8 @@ def main():
             working_image = input_lut.apply(image_data_rec2020)
 
         # perform adjustments in working colour space
+        # TODO: avoid pre-inversion balance, just set black + white point
+        #       for automated inversions in a linear colour space
         # apply white balance
         balanced_red_channel = working_image[:, :, 0].copy() * args.red_balance
         balanced_green_channel = working_image[:, :, 1].copy() * args.green_balance
