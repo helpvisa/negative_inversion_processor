@@ -1,4 +1,8 @@
+# environment
+.env/
+
 # working files
+__pycache__
 *.swp
 *.swo
 *.tiff
