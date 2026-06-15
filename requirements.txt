@@ -1,0 +1,3 @@
+color-science==0.4.5
+numpy==2.4.6
+tifffile==2026.6.1
