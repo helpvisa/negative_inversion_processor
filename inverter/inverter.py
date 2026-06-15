@@ -39,13 +39,13 @@ def main():
                         type=float, default=1.0,
                         help="Multiplier for green channel (pre-inversion).")
     parser.add_argument('--analysis-width', '-W',
-                        type=int, default=4000,
+                        type=int, default=5000,
                         help="Size of analysis bounding box (width).")
     parser.add_argument('--analysis-height', '-H',
-                        type=int, default=2666,
+                        type=int, default=3333,
                         help="Size of analysis bounding box (height).")
     parser.add_argument('--bp-margin',
-                        type=float, default=0.01,
+                        type=float, default=0.0,
                         help="Black point correction safety margin (lift)")
     parser.add_argument('--exposure-comp',
                         type=float, default=1.0,
@@ -56,6 +56,9 @@ def main():
     parser.add_argument('--skip-auto-adjustments',
                         action='store_true',
                         help="Do not apply any auto-adjustments.")
+    parser.add_argument('--debug-analysis-region',
+                        action='store_true',
+                        help="Show bounds of analysis region.")
     args = parser.parse_args()
 
 
@@ -81,6 +84,43 @@ def main():
             working_image = input_lut.apply(working_image)
 
         # perform adjustments in working colour space
+        rec2020_lum_weights = np.array([0.2627, 0.6780, 0.05903])
+        # determine and acqiure analysis region
+        image_height, image_width, image_channels = working_image.shape
+        analysis_start_x = (image_width - args.analysis_width) // 2
+        analysis_end_x = analysis_start_x + args.analysis_width
+        analysis_start_y = (image_height - args.analysis_height) // 2
+        analysis_end_y = analysis_start_y + args.analysis_height
+
+        # create pre-inversion analysis regoin
+        analysis_region_pre = working_image[analysis_start_y:analysis_end_y,
+                                            analysis_start_x:analysis_end_x]
+        # perform pre-inversion white balance
+        if not args.skip_auto_adjustments:
+            # find max luminance value in region
+            pre_lum_values = np.dot(analysis_region_pre, rec2020_lum_weights)
+            # and find point of maximum luminance
+            max_lum_y, max_lum_x = np.unravel_index(np.argmax(pre_lum_values),
+                                                    pre_lum_values.shape)
+            # now grab the rgb values at that point
+            max_rgb_values = analysis_region_pre[max_lum_y, max_lum_x]
+            print(f"INFO: Darkest values (pre-inversion):\n"
+                  f"      RED:   {max_rgb_values[0]}\n"
+                  f"      GREEN: {max_rgb_values[1]}\n"
+                  f"      BLUE:  {max_rgb_values[2]}",
+                  file=sys.stderr)
+            red_channel_wb = working_image[:, :, 0].copy()
+            green_channel_wb = working_image[:, :, 1].copy()
+            blue_channel_wb = working_image[:, :, 2].copy()
+            wb_mult = np.max(max_rgb_values)
+            red_channel_wb *= wb_mult / max_rgb_values[0]
+            green_channel_wb *= wb_mult / max_rgb_values[1]
+            blue_channel_wb *= wb_mult / max_rgb_values[2]
+            working_image = np.stack([red_channel_wb,
+                                      green_channel_wb,
+                                      blue_channel_wb],
+                                     axis=2)
+
         # invert image directly
         if not args.skip_inversion:
             # we calculate density from "transmittance" using log10(1/x)
@@ -94,44 +134,74 @@ def main():
                                                            inverse_y_points)
             working_image = inverse_spline(working_image)
 
-        # automatically determine min/max point for each channel
-        # determine and acqiure analysis region
-        if not args.skip_auto_adjustments:
-            image_height, image_width, image_channels = working_image.shape
-            analysis_start_x = (image_width - args.analysis_width) // 2
-            analysis_end_x = analysis_start_x + image_width
-            analysis_start_y = (image_height - args.analysis_height) // 2
-            analysis_end_y = analysis_start_y + image_height
-            analysis_region = working_image[analysis_start_y:analysis_end_y,
-                                            analysis_start_x:analysis_end_x]
-            # find darkest point in each channel individually (ignore axis 2)
-            min_rgb_values = np.min(analysis_region, axis=(0, 1))
-            print(f"INFO: Darkest values:\n"
-                  f"      RED:   {min_rgb_values[0]}\n"
-                  f"      GREEN: {min_rgb_values[1]}\n"
-                  f"      BLUE:  {min_rgb_values[2]}\n",
-                  file=sys.stderr)
-            # TODO: find spot closest to middle gray and use it to white balance
-            # add auto-adjustments (offset + density adjustment)
-            red_channel_auto = working_image[:, :, 0].copy()
-            green_channel_auto = working_image[:, :, 1].copy()
-            blue_channel_auto = working_image[:, :, 2].copy()
-            red_channel_auto -= min_rgb_values[0] - args.bp_margin
-            green_channel_auto -= min_rgb_values[1] - args.bp_margin
-            blue_channel_auto -= min_rgb_values[2] - args.bp_margin
-            working_image = np.stack([red_channel_auto,
-                                      green_channel_auto,
-                                      blue_channel_auto],
-                                     axis=2)
-
-        # apply manual white balance
-        balanced_red_channel = working_image[:, :, 0].copy() * args.red_balance
-        balanced_green_channel = working_image[:, :, 1].copy() * args.green_balance
-        balanced_blue_channel = working_image[:, :, 2].copy() * args.blue_balance
-        working_image = np.stack([balanced_red_channel,
-                                  balanced_green_channel,
-                                  balanced_blue_channel],
-                                 axis=2)
+            # automatically determine min/max point for each channel
+            if not args.skip_auto_adjustments:
+                # re-find black point
+                # update analysis region
+                analysis_region_post = working_image[analysis_start_y:analysis_end_y,
+                                                     analysis_start_x:analysis_end_x]
+                # find darkest luminance point
+                min_lum_values = np.dot(analysis_region_post, rec2020_lum_weights)
+                min_lum_y, min_lum_x = np.unravel_index(np.argmin(min_lum_values),
+                                                        min_lum_values.shape)
+                # now grab the rgb values at that point
+                min_rgb_values = analysis_region_post[min_lum_y, min_lum_x]
+                print(f"INFO: Darkest values (post-inversion):\n"
+                      f"      RED:   {min_rgb_values[0]}\n"
+                      f"      GREEN: {min_rgb_values[1]}\n"
+                      f"      BLUE:  {min_rgb_values[2]}",
+                      file=sys.stderr)
+                # add auto-adjustments (offset + density adjustment)
+                red_channel_auto = working_image[:, :, 0].copy()
+                green_channel_auto = working_image[:, :, 1].copy()
+                blue_channel_auto = working_image[:, :, 2].copy()
+                red_channel_auto -= min_rgb_values[0] - args.bp_margin
+                green_channel_auto -= min_rgb_values[1] - args.bp_margin
+                blue_channel_auto -= min_rgb_values[2] - args.bp_margin
+                working_image = np.stack([red_channel_auto,
+                                          green_channel_auto,
+                                          blue_channel_auto],
+                                         axis=2)
+                # find spot closest to middle gray for density adjustment
+                # update analysis region from current working image
+                analysis_region_post = working_image[analysis_start_y:analysis_end_y,
+                                                     analysis_start_x:analysis_end_x]
+                # normalize image data
+                post_lum_values = np.dot(analysis_region_post,
+                                         rec2020_lum_weights)
+                max_post_lum_y, max_post_lum_x = np.unravel_index(np.argmax(post_lum_values),
+                                                                  post_lum_values.shape)
+                max_post_lum_rgb_values = analysis_region_post[max_post_lum_y,
+                                                               max_post_lum_x]
+                normalization_factor = np.max(max_post_lum_rgb_values)
+                # re-assign to avoid overwiting working_image
+                # (analysis_region_post references working_image directly)
+                analysis_region_post = analysis_region_post / normalization_factor
+                post_lum_values_norm = np.dot(analysis_region_post,
+                                              rec2020_lum_weights)
+                # find the closest luminance point to 'middle gray'
+                mid_gray_idx = np.argmin(np.abs(post_lum_values_norm - 0.18))
+                mid_gray_y, mid_gray_x = np.unravel_index(mid_gray_idx,
+                                                          post_lum_values_norm.shape)
+                mid_gray_rgb_values = analysis_region_post[mid_gray_y,
+                                                           mid_gray_x]
+                print(f"INFO: Middle gray RGB values (normalized):\n"
+                      f"      RED:   {mid_gray_rgb_values[0]}\n"
+                      f"      GREEN: {mid_gray_rgb_values[1]}\n"
+                      f"      BLUE:  {mid_gray_rgb_values[2]}",
+                      file=sys.stderr)
+                # apply multiplications to channel densities to balance them
+                mid_gray_mult = np.max(mid_gray_rgb_values)
+                red_channel_mid_gray = working_image[:, :, 0].copy()
+                green_channel_mid_gray = working_image[:, :, 1].copy()
+                blue_channel_mid_gray = working_image[:, :, 2].copy()
+                red_channel_mid_gray += (mid_gray_mult - mid_gray_rgb_values[0]) * normalization_factor
+                green_channel_mid_gray += (mid_gray_mult - mid_gray_rgb_values[1]) * normalization_factor
+                blue_channel_mid_gray += (mid_gray_mult - mid_gray_rgb_values[2]) * normalization_factor
+                working_image = np.stack([red_channel_mid_gray,
+                                          green_channel_mid_gray,
+                                          blue_channel_mid_gray],
+                                         axis=2)
 
         # map density to luminance
         if not args.skip_inversion:
@@ -154,6 +224,12 @@ def main():
             darkest_color = final_image[black_pt_idx]
             final_image -= darkest_color
         final_image *= args.exposure_comp
+
+        if args.debug_analysis_region:
+            final_image[analysis_start_y:analysis_start_y + 64,
+                        analysis_start_x:analysis_start_x + 64] = [1.0, 0.0, 0.0]
+            final_image[analysis_end_y:analysis_end_y + 64,
+                        analysis_end_x:analysis_end_x + 64] = [1.0, 0.0, 0.0]
 
         # save image to disk
         # do we possess an icc profile to embed?
