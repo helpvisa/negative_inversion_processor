@@ -47,9 +47,6 @@ def parse_user_arguments():
     parser.add_argument('--debug-analysis-region',
                         action='store_true',
                         help="Show bounds of analysis region.")
-    parser.add_argument('--wb-steps', '-S',
-                        type=int, default=6,
-                        help="Number of times to re-balance around mid-gray.")
     parser.add_argument('--red-balance', '-R',
                         type=float, default=1.0,
                         help="Custom red balance (in density space).")

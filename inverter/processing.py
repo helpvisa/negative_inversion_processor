@@ -27,7 +27,7 @@ def density_to_luminance(image_data):
     return lum_spline(image_data)
 
 
-def emulsion_wb(image_data, region, colourspace_weights,
+def emulsion_wb(image_data, blurred_data, region, colourspace_weights,
                 custom_black_point=None):
     """
     White balance a non-inverted camera negative to the "brightest point"
@@ -37,8 +37,8 @@ def emulsion_wb(image_data, region, colourspace_weights,
     In most cases, this is none other than the unexposed film base itself.
     """
     # create pre-inversion analysis region
-    analysis_region = image_data[region[0][1]:region[1][1],
-                                     region[0][0]:region[1][0]]
+    analysis_region = blurred_data[region[0][1]:region[1][1],
+                                   region[0][0]:region[1][0]]
     max_rgb_values = None
     if custom_black_point:
         print(f"CUSTOM: Custom black point: {custom_black_point}",
@@ -47,6 +47,8 @@ def emulsion_wb(image_data, region, colourspace_weights,
                                     custom_black_point[0]]
     else:
         # find max luminance value in region
+        # TODO: maybe we normalize and find value closest to RGB(1.0, 1.0, 1.0)?
+        #       we could do this for all min/max checks
         pre_lum_values = np.dot(analysis_region, colourspace_weights)
         # and find point of maximum luminance
         max_lum_y, max_lum_x = np.unravel_index(np.argmax(pre_lum_values),
@@ -61,6 +63,7 @@ def emulsion_wb(image_data, region, colourspace_weights,
     red_channel_wb = image_data[:, :, 0].copy()
     green_channel_wb = image_data[:, :, 1].copy()
     blue_channel_wb = image_data[:, :, 2].copy()
+    # apply initial balance around channel with strongest cast
     wb_mult = np.max(max_rgb_values)
     rc_wb = wb_mult / max_rgb_values[0]
     gc_wb = wb_mult / max_rgb_values[1]
@@ -81,7 +84,7 @@ def emulsion_wb(image_data, region, colourspace_weights,
     return new_image_data, (rc_wb, gc_wb, bc_wb)
 
 
-def density_wb(image_data, region, colourspace_weights,
+def density_wb(image_data, blurred_data, region, colourspace_weights,
                custom_gray_point=None):
     """
     Add or subtract from a determined middle-gray point to attempt equalization
@@ -101,8 +104,8 @@ def density_wb(image_data, region, colourspace_weights,
         mid_gray_rgb_values /= normalization_factor
     else:
         # update analysis region from current working image
-        analysis_region = image_data[region[0][1]:region[1][1],
-                                     region[0][0]:region[1][0]]
+        analysis_region = blurred_data[region[0][1]:region[1][1],
+                                       region[0][0]:region[1][0]]
         # normalize image data
         post_lum_values = np.dot(analysis_region,
                                  colourspace_weights)
@@ -111,42 +114,56 @@ def density_wb(image_data, region, colourspace_weights,
         max_post_lum_rgb_values = analysis_region[max_post_lum_y,
                                                   max_post_lum_x]
         normalization_factor = np.max(max_post_lum_rgb_values)
-        # re-assign to avoid overwiting image_data
-        # (analysis_region references image_data directly)
+        # re-assign to avoid overwiting image_data, since
+        # analysis_region references image_data directly
         analysis_region = analysis_region / normalization_factor
-        post_lum_values_norm = np.dot(analysis_region,
-                                      colourspace_weights)
+        low_gray = np.array([0.09, 0.09, 0.09], dtype=np.float32)
+        high_gray = np.array([0.36, 0.36, 0.36], dtype=np.float32)
         # find the closest luminance point to 'middle gray'
-        mid_gray_idx = np.argmin(np.abs(post_lum_values_norm - 0.18))
-        mid_gray_y, mid_gray_x = np.unravel_index(mid_gray_idx,
-                                                  post_lum_values_norm.shape)
-        mid_gray_rgb_values = analysis_region[mid_gray_y,
-                                              mid_gray_x]
+        proximity_to_low_gray = np.linalg.norm(analysis_region - low_gray,
+                                               axis=-1)
+        proximity_to_high_gray = np.linalg.norm(analysis_region - high_gray,
+                                                axis=-1)
+        low_mid_gray_y, low_mid_gray_x = np.unravel_index(np.argmin(proximity_to_low_gray),
+                                                          proximity_to_low_gray.shape)
+        high_mid_gray_y, high_mid_gray_x = np.unravel_index(np.argmin(proximity_to_high_gray),
+                                                          proximity_to_high_gray.shape)
+        low_mid_gray_rgb_values = analysis_region[low_mid_gray_y,
+                                                  low_mid_gray_x]
+        high_mid_gray_rgb_values = analysis_region[high_mid_gray_y,
+                                                   high_mid_gray_x]
+        mid_gray_rgb_values = high_mid_gray_rgb_values - low_mid_gray_rgb_values
     print(f"INFO: Middle gray RGB values (normalized):\n"
           f"      RED:   {mid_gray_rgb_values[0]}\n"
           f"      GREEN: {mid_gray_rgb_values[1]}\n"
           f"      BLUE:  {mid_gray_rgb_values[2]}",
           file=sys.stderr)
-    # apply adds and mults to channel densities to balance them
-    mid_gray_mult = np.max(mid_gray_rgb_values)
+    # apply mults to channel densities to balance them
+    mid_mult = max(mid_gray_rgb_values)
     red_channel_mid_gray = image_data[:, :, 0].copy()
     green_channel_mid_gray = image_data[:, :, 1].copy()
     blue_channel_mid_gray = image_data[:, :, 2].copy()
-    rc_change = (mid_gray_mult - mid_gray_rgb_values[0]) * normalization_factor
-    gc_change = (mid_gray_mult - mid_gray_rgb_values[1]) * normalization_factor
-    bc_change = (mid_gray_mult - mid_gray_rgb_values[2]) * normalization_factor
-    red_channel_mid_gray += rc_change
-    green_channel_mid_gray += gc_change
-    blue_channel_mid_gray += bc_change
+    rc_change = mid_gray_rgb_values[0] / mid_mult
+    gc_change = mid_gray_rgb_values[1] / mid_mult
+    bc_change = mid_gray_rgb_values[2] / mid_mult
+    red_channel_mid_gray *= rc_change
+    green_channel_mid_gray *= gc_change
+    blue_channel_mid_gray *= bc_change
     new_image_data = np.stack([red_channel_mid_gray,
                               green_channel_mid_gray,
                               blue_channel_mid_gray],
                              axis=2)
+    # print out total aggregate change
+    print(f"ADJUSTED: Middle gray adjustment:\n"
+          f"          RED:   {rc_change}\n"
+          f"          GREEN: {gc_change}\n"
+          f"          BLUE:  {bc_change}",
+          file=sys.stderr)
     # return image data and tuple representing adjustments in rgb
     return new_image_data, (rc_change, gc_change, bc_change)
 
 
-def density_balance_gain(image_data, region, colourspace_weights,
+def density_balance_gain(image_data, blurred_data, region, colourspace_weights,
                          custom_point=None, black_point=False):
     """
     Multiply the individual colour channels until equalized at a given point.
@@ -166,8 +183,8 @@ def density_balance_gain(image_data, region, colourspace_weights,
                                        custom_point[0]]
     else:
         # update analysis region
-        analysis_region = image_data[region[0][1]:region[1][1],
-                                     region[0][0]:region[1][0]]
+        analysis_region = blurred_data[region[0][1]:region[1][1],
+                                       region[0][0]:region[1][0]]
         # find brightest luminance point and balance around it
         wb_lum_values = np.dot(analysis_region, colourspace_weights)
         wb_lum_y = 0
@@ -185,7 +202,8 @@ def density_balance_gain(image_data, region, colourspace_weights,
           f"      GREEN: {wb_lum_rgb_values[1]}\n"
           f"      BLUE:  {wb_lum_rgb_values[2]}",
           file=sys.stderr)
-    wb_mult = np.max(wb_lum_rgb_values)
+    # always apply final balance around green channel
+    wb_mult = wb_lum_rgb_values[1]
     red_channel_wb_final = image_data[:, :, 0].copy()
     green_channel_wb_final = image_data[:, :, 1].copy()
     blue_channel_wb_final = image_data[:, :, 2].copy()

@@ -34,7 +34,6 @@ def preview_negative(canvas_widget: tk.Canvas, image_id):
         "skip_inversion": False,
         "skip_auto_adjustments": False,
         "debug_analysis_region": False,
-        "wb_steps": 10,
         "red_balance": 1.0,
         "green_balance": 1.0,
         "blue_balance": 1.0,
