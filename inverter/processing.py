@@ -2,6 +2,33 @@ import sys
 import scipy
 import numpy as np
 
+
+def apply_addition(image_data, adjustment):
+    """
+    Perform addition / subtraction to a given working image and return the
+    result.
+
+    Adjustment is a tuple representing (r, g, b)
+    """
+    red_new = image_data[:, :, 0].copy() + adjustment[0]
+    green_new = image_data[:, :, 1].copy() + adjustment[1]
+    blue_new = image_data[:, :, 2].copy() + adjustment[2]
+    return np.stack([red_new, green_new, blue_new], axis=2)
+
+
+def apply_gain(image_data, adjustment):
+    """
+    Perform multiplication on a given working image and return the
+    result.
+
+    Adjustment is a tuple representing (r, g, b)
+    """
+    red_new = image_data[:, :, 0].copy() * adjustment[0]
+    green_new = image_data[:, :, 1].copy() * adjustment[1]
+    blue_new = image_data[:, :, 2].copy() * adjustment[2]
+    return np.stack([red_new, green_new, blue_new], axis=2)
+
+
 def invert_to_density(image_data):
     """
     Invert a given film negative into a linear density space where it can
@@ -27,7 +54,7 @@ def density_to_luminance(image_data):
     return lum_spline(image_data)
 
 
-def emulsion_wb(image_data, blurred_data, region, colourspace_weights,
+def emulsion_wb(image_data, region, colourspace_weights,
                 custom_black_point=None):
     """
     White balance a non-inverted camera negative to the "brightest point"
@@ -35,10 +62,12 @@ def emulsion_wb(image_data, blurred_data, region, colourspace_weights,
     inverted film's new "black point".
 
     In most cases, this is none other than the unexposed film base itself.
+
+    Return a dictionary reprsenting the type of adjustment and its values.
     """
     # create pre-inversion analysis region
-    analysis_region = blurred_data[region[0][1]:region[1][1],
-                                   region[0][0]:region[1][0]]
+    analysis_region = image_data[region[0][1]:region[1][1],
+                                 region[0][0]:region[1][0]]
     max_rgb_values = None
     if custom_black_point:
         print(f"CUSTOM: Custom black point: {custom_black_point}",
@@ -60,31 +89,24 @@ def emulsion_wb(image_data, blurred_data, region, colourspace_weights,
           f"      GREEN: {max_rgb_values[1]}\n"
           f"      BLUE:  {max_rgb_values[2]}",
           file=sys.stderr)
-    red_channel_wb = image_data[:, :, 0].copy()
-    green_channel_wb = image_data[:, :, 1].copy()
-    blue_channel_wb = image_data[:, :, 2].copy()
     # apply initial balance around channel with strongest cast
-    wb_mult = np.max(max_rgb_values)
-    rc_wb = wb_mult / max_rgb_values[0]
-    gc_wb = wb_mult / max_rgb_values[1]
-    bc_wb = wb_mult / max_rgb_values[2]
-    red_channel_wb *= rc_wb
-    green_channel_wb *= gc_wb
-    blue_channel_wb *= bc_wb
-    new_image_data = np.stack([red_channel_wb,
-                               green_channel_wb,
-                               blue_channel_wb],
-                              axis=2)
-    print(f"ADJUSTED: White balance on emulsion (pre-inversion):\n"
-          f"          RED:   {rc_wb}\n"
-          f"          GREEN: {gc_wb}\n"
-          f"          BLUE:  {bc_wb}",
+    mult = np.max(max_rgb_values)
+    rc = mult / max_rgb_values[0]
+    gc = mult / max_rgb_values[1]
+    bc = mult / max_rgb_values[2]
+    print(f"ADJUSTMENT: White balance on emulsion (pre-inversion):\n"
+          f"          RED:   {rc}\n"
+          f"          GREEN: {gc}\n"
+          f"          BLUE:  {bc}",
           file=sys.stderr)
-    # return image data and tuple representing value adjustments in rgb
-    return new_image_data, (rc_wb, gc_wb, bc_wb)
+    adjustment = {
+        "type": "mult",
+        "values": (rc, gc, bc)
+    }
+    return adjustment
 
 
-def density_wb(image_data, blurred_data, region, colourspace_weights,
+def density_wb(image_data, region, colourspace_weights,
                custom_gray_point=None):
     """
     Add or subtract from a determined middle-gray point to attempt equalization
@@ -104,7 +126,7 @@ def density_wb(image_data, blurred_data, region, colourspace_weights,
         mid_gray_rgb_values /= normalization_factor
     else:
         # update analysis region from current working image
-        analysis_region = blurred_data[region[0][1]:region[1][1],
+        analysis_region = image_data[region[0][1]:region[1][1],
                                        region[0][0]:region[1][0]]
         # normalize image data
         post_lum_values = np.dot(analysis_region,
@@ -154,7 +176,7 @@ def density_wb(image_data, blurred_data, region, colourspace_weights,
                               blue_channel_mid_gray],
                              axis=2)
     # print out total aggregate change
-    print(f"ADJUSTED: Middle gray adjustment:\n"
+    print(f"ADJUSTMENT: Middle gray adjustment:\n"
           f"          RED:   {rc_change}\n"
           f"          GREEN: {gc_change}\n"
           f"          BLUE:  {bc_change}",
@@ -163,7 +185,7 @@ def density_wb(image_data, blurred_data, region, colourspace_weights,
     return new_image_data, (rc_change, gc_change, bc_change)
 
 
-def density_balance_gain(image_data, blurred_data, region, colourspace_weights,
+def density_balance_gain(image_data, region, colourspace_weights,
                          custom_point=None, black_point=False):
     """
     Multiply the individual colour channels until equalized at a given point.
@@ -183,7 +205,7 @@ def density_balance_gain(image_data, blurred_data, region, colourspace_weights,
                                        custom_point[0]]
     else:
         # update analysis region
-        analysis_region = blurred_data[region[0][1]:region[1][1],
+        analysis_region = image_data[region[0][1]:region[1][1],
                                        region[0][0]:region[1][0]]
         # find brightest luminance point and balance around it
         wb_lum_values = np.dot(analysis_region, colourspace_weights)
@@ -217,7 +239,7 @@ def density_balance_gain(image_data, blurred_data, region, colourspace_weights,
                                green_channel_wb_final,
                                blue_channel_wb_final],
                               axis=2)
-    print(f"ADJUSTED: Final {"black" if black_point else "white"} balance:\n"
+    print(f"ADJUSTMENT: Final {"black" if black_point else "white"} balance:\n"
           f"          RED:   {rc_wb}\n"
           f"          GREEN: {gc_wb}\n"
           f"          BLUE:  {bc_wb}",

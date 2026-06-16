@@ -8,7 +8,8 @@ from scipy import ndimage
 import parse_cli_arguments
 from processing import (invert_to_density, density_to_luminance,
                         emulsion_wb, density_wb,
-                        density_balance_gain, density_custom_gain)
+                        density_balance_gain, density_custom_gain,
+                        apply_addition, apply_gain)
 
 
 def load_raw_image(path):
@@ -86,6 +87,8 @@ def process_negative(args):
 
     # perform adjustments in working colour space
     rec2020_lum_weights = np.array([0.2627, 0.6780, 0.05903])
+    # store adjustments in array for application and export
+    adjustments = []
     # determine and build analysis region
     image_height, image_width, image_channels = working_image.shape
     analysis_start_x = (image_width - args.analysis_width) // 2
@@ -99,11 +102,10 @@ def process_negative(args):
     # perform pre-inversion white balance
     if not args.skip_auto_adjustments:
         custom_black_point = args.custom_black_point if args.custom_black_point else None
-        working_image, ewb_adjustments = emulsion_wb(working_image,
-                                                     blurred_image,
-                                                     analysis_bounding_box,
-                                                     rec2020_lum_weights,
-                                                     custom_black_point)
+        new_adjustment = emulsion_wb(working_image, analysis_bounding_box,
+                                   rec2020_lum_weights, custom_black_point)
+        print(new_adjustment)
+        apply_gain(working_image, new_adjustment["values"])
 
     # invert image to begin work in "density space"
     if not args.skip_inversion:
@@ -113,14 +115,12 @@ def process_negative(args):
             # find spot closest to middle gray for density adjustment
             custom_gray_point = args.custom_gray_point if args.custom_gray_point else None
             working_image, dwb_adjustments = density_wb(working_image,
-                                                        blurred_image,
                                                         analysis_bounding_box,
                                                         rec2020_lum_weights,
                                                         custom_gray_point)
             # apply an automated white balance based on white point
             custom_white_point = args.custom_white_point if args.custom_white_point else None
             working_image, dbgw_adjustments = density_balance_gain(working_image,
-                                                                   blurred_image,
                                                                    analysis_bounding_box,
                                                                    rec2020_lum_weights,
                                                                    custom_white_point)
@@ -140,7 +140,7 @@ def process_negative(args):
         working_image = density_to_luminance(working_image)
 
     # shift blacks back to zero
-    final_analysis_region = blurred_image[analysis_bounding_box[0][1]:analysis_bounding_box[1][1],
+    final_analysis_region = working_image[analysis_bounding_box[0][1]:analysis_bounding_box[1][1],
                                           analysis_bounding_box[0][0]:analysis_bounding_box[1][0]]
     final_lum_values = np.dot(final_analysis_region, rec2020_lum_weights)
     final_lum_x, final_lum_y = np.unravel_index(np.argmin(final_lum_values),
