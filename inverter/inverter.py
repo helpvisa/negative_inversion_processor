@@ -7,9 +7,9 @@ import tifffile
 from scipy import ndimage
 import parse_cli_arguments
 from processing import (invert_to_density, density_to_luminance,
-                        emulsion_wb, density_wb,
-                        density_balance_gain, density_custom_gain,
-                        apply_addition, apply_gain)
+                        emulsion_wb, density_wb, density_balance_gain,
+                        apply_gain,
+                        process_all_adjustments)
 
 
 def load_raw_image(path):
@@ -26,9 +26,10 @@ def load_raw_image(path):
                                output_color=rawpy.ColorSpace.Rec2020)
 
 
-def process_negative(args):
+def process_negative(source_image, args):
     """
     Process a negative, derived from a camera RAW file.
+    The working_image must be an f32 numpy array.
 
     `args` represents a complete collection of configuration options, derived
     primarily from the options exposed in the command-line interface.
@@ -37,6 +38,7 @@ def process_negative(args):
 
     A full list of applicable options is as follows:
         - `image_path`
+        - `blur`
         - `preset`
         - `generate_preset`
         - `analysis_width`
@@ -59,31 +61,30 @@ def process_negative(args):
     if type(args) is dict:
         args = SimpleNamespace(**args)
 
-    # convert camera raw to 32-bit floating point
-    working_image = load_raw_image(args.image_path).astype(np.float32) / 65535.0
-    print("Creating blurred analysis image...", file=sys.stderr)
-    # will have to updated the color balance of the blurred image as well
-    # color balance off this image, then re-apply the transformations to the base?
-    blurred_image = ndimage.gaussian_filter(working_image, sigma=(32, 32, 0))
+    # create working image from source
+    working_image = source_image.copy()
 
     if args.resize:
-        x_factor = args.resize[0] / working_image.shape[1]
-        y_factor = args.resize[1] / working_image.shape[0]
-        args.analysis_width = int(math.floor(args.analysis_width * x_factor))
-        args.analysis_height = int(math.floor(args.analysis_height * y_factor))
+        args.analysis_width = int(math.floor(args.analysis_width * args.resize))
+        args.analysis_height = int(math.floor(args.analysis_height * args.resize))
         if args.custom_white_point:
-            args.custom_white_point[0] = int(math.floor(args.custom_white_point[0] * x_factor))
-            args.custom_white_point[1] = int(math.floor(args.custom_white_point[1] * y_factor))
+            args.custom_white_point[0] = int(math.floor(args.custom_white_point[0] * args.resize))
+            args.custom_white_point[1] = int(math.floor(args.custom_white_point[1] * args.resize))
         if args.custom_gray_point:
-            args.custom_gray_point[0] = int(math.floor(args.custom_gray_point[0] * x_factor))
-            args.custom_gray_point[1] = int(math.floor(args.custom_gray_point[1] * y_factor))
+            args.custom_gray_point[0] = int(math.floor(args.custom_gray_point[0] * args.resize))
+            args.custom_gray_point[1] = int(math.floor(args.custom_gray_point[1] * args.resize))
         if args.custom_black_point:
-            args.custom_black_point[0] = int(math.floor(args.custom_black_point[0] * x_factor))
-            args.custom_black_point[1] = int(math.floor(args.custom_black_point[1] * y_factor))
-        resize_factor = (x_factor, y_factor, 1)
+            args.custom_black_point[0] = int(math.floor(args.custom_black_point[0] * args.resize))
+            args.custom_black_point[1] = int(math.floor(args.custom_black_point[1] * args.resize))
+        resize_factor = (args.resize, args.resize, 1)
         working_image = ndimage.zoom(working_image,
                                      resize_factor,
                                      order=3)
+    if args.blur:
+        print("Creating blurred analysis image...", file=sys.stderr)
+        working_image = ndimage.gaussian_filter(working_image, sigma=(args.blur,
+                                                                      args.blur,
+                                                                      0))
 
     # perform adjustments in working colour space
     rec2020_lum_weights = np.array([0.2627, 0.6780, 0.05903])
@@ -101,35 +102,50 @@ def process_negative(args):
 
     # perform pre-inversion white balance
     if not args.skip_auto_adjustments:
-        custom_black_point = args.custom_black_point if args.custom_black_point else None
+        custom_black_point = args.custom_black_point if \
+                                 args.custom_black_point else \
+                                 None
         new_adjustment = emulsion_wb(working_image, analysis_bounding_box,
-                                   rec2020_lum_weights, custom_black_point)
-        print(new_adjustment)
-        apply_gain(working_image, new_adjustment["values"])
+                                     rec2020_lum_weights, custom_black_point)
+        working_image = apply_gain(working_image, new_adjustment["values"])
+        adjustments.append(new_adjustment.copy())
 
     # invert image to begin work in "density space"
     if not args.skip_inversion:
+        new_adjustment = {"type": "invert_to_density", "values": None}
         working_image = invert_to_density(working_image)
+        adjustments.append(new_adjustment.copy())
 
         if not args.skip_auto_adjustments:
             # find spot closest to middle gray for density adjustment
-            custom_gray_point = args.custom_gray_point if args.custom_gray_point else None
-            working_image, dwb_adjustments = density_wb(working_image,
-                                                        analysis_bounding_box,
-                                                        rec2020_lum_weights,
-                                                        custom_gray_point)
+            custom_gray_point = args.custom_gray_point if \
+                                    args.custom_gray_point else \
+                                    None
+            new_adjustment = density_wb(working_image, analysis_bounding_box,
+                                        rec2020_lum_weights, custom_gray_point)
+            working_image = apply_gain(working_image, new_adjustment["values"])
+            adjustments.append(new_adjustment.copy())
             # apply an automated white balance based on white point
-            custom_white_point = args.custom_white_point if args.custom_white_point else None
-            working_image, dbgw_adjustments = density_balance_gain(working_image,
-                                                                   analysis_bounding_box,
-                                                                   rec2020_lum_weights,
-                                                                   custom_white_point)
+            custom_white_point = args.custom_white_point if \
+                                     args.custom_white_point else \
+                                     None
+            new_adjustment = density_balance_gain(working_image,
+                                                  analysis_bounding_box,
+                                                  rec2020_lum_weights,
+                                                  custom_white_point)
+            working_image = apply_gain(working_image, new_adjustment["values"])
+            adjustments.append(new_adjustment.copy())
 
-        # apply a final, user-adjustable gain to balance in density space
-        working_image = density_custom_gain(working_image, (args.red_balance,
-                                                            args.green_balance,
-                                                            args.blue_balance))
         if args.red_balance != 1.0 or args.green_balance != 1.0 or args.blue_balance != 1.0:
+            # apply a final, user-adjustable gain to balance in density space
+            new_adjustment = {
+                "type": "mult",
+                "values": (args.red_balance,
+                           args.green_balance,
+                           args.blue_balance)
+            }
+            working_image = apply_gain(working_image, new_adjustment["values"])
+            adjustments.append(new_adjustment.copy())
             print(f"ADJUSTED: User white balance:\n"
                   f"          RED:   {args.red_balance}\n"
                   f"          GREEN: {args.green_balance}\n"
@@ -137,43 +153,43 @@ def process_negative(args):
                   file=sys.stderr)
 
         # map density to luminance
+        new_adjustment = {"type": "density_to_luminance", "values": None}
         working_image = density_to_luminance(working_image)
+        adjustments.append(new_adjustment.copy())
 
     # shift blacks back to zero
-    final_analysis_region = working_image[analysis_bounding_box[0][1]:analysis_bounding_box[1][1],
-                                          analysis_bounding_box[0][0]:analysis_bounding_box[1][0]]
-    final_lum_values = np.dot(final_analysis_region, rec2020_lum_weights)
-    final_lum_x, final_lum_y = np.unravel_index(np.argmin(final_lum_values),
-                                                final_lum_values.shape)
-    final_lum_rgb_values = final_analysis_region[final_lum_x, final_lum_y]
-    final_red_offset = working_image[:, :, 0].copy() - final_lum_rgb_values[0]
-    final_green_offset = working_image[:, :, 1].copy() - final_lum_rgb_values[1]
-    final_blue_offset = working_image[:, :, 2].copy() - final_lum_rgb_values[2]
-    working_image = np.stack([final_red_offset,
-                              final_green_offset,
-                              final_blue_offset],
-                             axis=2)
+    # TODO: re-enable under args flag
+    # final_analysis_region = working_image[analysis_bounding_box[0][1]:analysis_bounding_box[1][1],
+    #                                       analysis_bounding_box[0][0]:analysis_bounding_box[1][0]]
+    # final_lum_values = np.dot(final_analysis_region, rec2020_lum_weights)
+    # final_lum_x, final_lum_y = np.unravel_index(np.argmin(final_lum_values),
+    #                                             final_lum_values.shape)
+    # final_lum_rgb_values = final_analysis_region[final_lum_x, final_lum_y]
+    # final_adjustment = (-final_lum_rgb_values[0],
+    #                     -final_lum_rgb_values[1],
+    #                     -final_lum_rgb_values[2])
+    # working_image = apply_addition(working_image, final_adjustment)
     # apply output exposure compensation
-    final_image = working_image * args.exposure_comp
+    # working_image = working_image * args.exposure_comp
 
     # display the analysis region and points if debug toggle enabled
-    if args.debug_analysis_region:
-        final_image[analysis_start_y-32:analysis_start_y+32,
-                    analysis_start_x-32:analysis_start_x+32] = [1.0, 0.0, 0.0]
-        final_image[analysis_end_y-32:analysis_end_y+32,
-                    analysis_end_x-32:analysis_end_x+32] = [1.0, 0.0, 0.0]
-        if args.custom_black_point:
-            final_image[args.custom_black_point[1]-32:args.custom_black_point[1]+32,
-                        args.custom_black_point[0]-32:args.custom_black_point[0]+32] = [0.0, 1.0, 0.0]
-        if args.custom_white_point:
-            final_image[args.custom_white_point[1]-32:args.custom_white_point[1]+32,
-                        args.custom_white_point[0]-32:args.custom_white_point[0]+32] = [0.0, 0.0, 1.0]
-        if args.custom_gray_point:
-            final_image[args.custom_gray_point[1]-32:args.custom_gray_point[1]+32,
-                        args.custom_gray_point[0]-32:args.custom_gray_point[0]+32] = [0.0, 1.0, 1.0]
+    # TODO: break this behaviour out of the processing loop and fix it
+    # if args.debug_analysis_region:
+    #     final_image[analysis_start_y-32:analysis_start_y+32,
+    #                 analysis_start_x-32:analysis_start_x+32] = [1.0, 0.0, 0.0]
+    #     final_image[analysis_end_y-32:analysis_end_y+32,
+    #                 analysis_end_x-32:analysis_end_x+32] = [1.0, 0.0, 0.0]
+    #     if args.custom_black_point:
+    #         final_image[args.custom_black_point[1]-32:args.custom_black_point[1]+32,
+    #                     args.custom_black_point[0]-32:args.custom_black_point[0]+32] = [0.0, 1.0, 0.0]
+    #     if args.custom_white_point:
+    #         final_image[args.custom_white_point[1]-32:args.custom_white_point[1]+32,
+    #                     args.custom_white_point[0]-32:args.custom_white_point[0]+32] = [0.0, 0.0, 1.0]
+    #     if args.custom_gray_point:
+    #         final_image[args.custom_gray_point[1]-32:args.custom_gray_point[1]+32,
+    #                     args.custom_gray_point[0]-32:args.custom_gray_point[0]+32] = [0.0, 1.0, 1.0]
     # finally, we return image data
-    # TODO: also return tuples of adjustments for saving presets
-    return final_image
+    return adjustments
 
 
 def main():
@@ -188,7 +204,12 @@ def main():
         exit(1)
 
     # process negatives
-    final_image = process_negative(args)
+    source_image = load_raw_image(args.image_path).astype(np.float32) / 65535.0
+    adjustments = process_negative(source_image, args)
+    adjustments.append({"type": "gain", "values": (args.exposure_comp,
+                                                   args.exposure_comp,
+                                                   args.exposure_comp)})
+    final_image = process_all_adjustments(source_image, adjustments)
     # save image to disk
     # do we possess an icc profile to embed?
     icc_tag = None

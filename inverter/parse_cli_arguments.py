@@ -25,15 +25,17 @@ def parse_user_arguments():
                         type=str, default=None,
                         help="ICC profile to embed in final TIFF export.")
     # image modifiers
-    parser.add_argument('--resize',
-                        nargs=2,
+    parser.add_argument('--blur',
                         type=int, default=None,
-                        help="Resize the image before processing.")
+                        help="Optionally blur the working image to average pixel values.")
+    parser.add_argument('--resize',
+                        type=float, default=0.5,
+                        help="Resize the image for the processing pipeline.")
     parser.add_argument('--analysis-width', '-W',
-                        type=int, default=5000,
+                        type=int, default=4000,
                         help="Size of analysis bounding box (width).")
     parser.add_argument('--analysis-height', '-H',
-                        type=int, default=3333,
+                        type=int, default=2666,
                         help="Size of analysis bounding box (height).")
     parser.add_argument('--exposure-comp',
                         type=float, default=1.0,

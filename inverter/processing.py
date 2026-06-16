@@ -3,7 +3,7 @@ import scipy
 import numpy as np
 
 
-def apply_addition(image_data, adjustment):
+def apply_addition(image_data, adjustment: tuple[float, float, float]):
     """
     Perform addition / subtraction to a given working image and return the
     result.
@@ -16,7 +16,7 @@ def apply_addition(image_data, adjustment):
     return np.stack([red_new, green_new, blue_new], axis=2)
 
 
-def apply_gain(image_data, adjustment):
+def apply_gain(image_data, adjustment: tuple[float, float, float]):
     """
     Perform multiplication on a given working image and return the
     result.
@@ -27,6 +27,26 @@ def apply_gain(image_data, adjustment):
     green_new = image_data[:, :, 1].copy() * adjustment[1]
     blue_new = image_data[:, :, 2].copy() * adjustment[2]
     return np.stack([red_new, green_new, blue_new], axis=2)
+
+
+def average_sample_point(image_data, sample_x, sample_y, kernel):
+    """
+    Average a box around a given sample point and return the value
+    as an f32 numpy array.
+    """
+    offset = int(kernel / 2)
+    x_min = int(sample_x - offset)
+    x_max = int(sample_x + offset)
+    y_min = int(sample_y - offset)
+    y_max = int(sample_y + offset)
+    average = np.array([0, 0, 0], dtype=np.float32)
+    for y in range(y_min, y_max):
+        for x in range(x_min, x_max):
+            if (y > 0 and y < image_data.shape[0]) and \
+               (x > 0 and x < image_data.shape[1]):
+                average += image_data[y, x]
+    return average / (kernel * kernel)
+    
 
 
 def invert_to_density(image_data):
@@ -72,8 +92,10 @@ def emulsion_wb(image_data, region, colourspace_weights,
     if custom_black_point:
         print(f"CUSTOM: Custom black point: {custom_black_point}",
               file=sys.stderr)
-        max_rgb_values = image_data[custom_black_point[1],
-                                    custom_black_point[0]]
+        max_rgb_values = average_sample_point(image_data,
+                                              custom_black_point[1],
+                                              custom_black_point[0],
+                                              32)
     else:
         # find max luminance value in region
         # TODO: maybe we normalize and find value closest to RGB(1.0, 1.0, 1.0)?
@@ -83,7 +105,9 @@ def emulsion_wb(image_data, region, colourspace_weights,
         max_lum_y, max_lum_x = np.unravel_index(np.argmax(pre_lum_values),
                                                 pre_lum_values.shape)
         # now grab the rgb values at that point
-        max_rgb_values = analysis_region[max_lum_y, max_lum_x]
+        max_rgb_values = average_sample_point(analysis_region,
+                                              max_lum_x, max_lum_y,
+                                              8)
     print(f"INFO: White balance on emulsion (pre-inversion):\n"
           f"      RED:   {max_rgb_values[0]}\n"
           f"      GREEN: {max_rgb_values[1]}\n"
@@ -109,8 +133,10 @@ def emulsion_wb(image_data, region, colourspace_weights,
 def density_wb(image_data, region, colourspace_weights,
                custom_gray_point=None):
     """
-    Add or subtract from a determined middle-gray point to attempt equalization
-    of all values clustered around middle gray, neutralizing the primary colour
+    Multiply individual channels around a gray point average from a light
+    and dark gray patch.
+
+    Equalizes all values clustered around gray, neutralizing the primary colour
     cast of a given negative.
     """
     normalization_factor = 1.0
@@ -127,7 +153,7 @@ def density_wb(image_data, region, colourspace_weights,
     else:
         # update analysis region from current working image
         analysis_region = image_data[region[0][1]:region[1][1],
-                                       region[0][0]:region[1][0]]
+                                     region[0][0]:region[1][0]]
         # normalize image data
         post_lum_values = np.dot(analysis_region,
                                  colourspace_weights)
@@ -150,10 +176,14 @@ def density_wb(image_data, region, colourspace_weights,
                                                           proximity_to_low_gray.shape)
         high_mid_gray_y, high_mid_gray_x = np.unravel_index(np.argmin(proximity_to_high_gray),
                                                           proximity_to_high_gray.shape)
-        low_mid_gray_rgb_values = analysis_region[low_mid_gray_y,
-                                                  low_mid_gray_x]
-        high_mid_gray_rgb_values = analysis_region[high_mid_gray_y,
-                                                   high_mid_gray_x]
+        low_mid_gray_rgb_values = average_sample_point(analysis_region,
+                                                       low_mid_gray_x,
+                                                       low_mid_gray_y,
+                                                       32)
+        high_mid_gray_rgb_values = average_sample_point(analysis_region,
+                                                        high_mid_gray_x,
+                                                        high_mid_gray_y,
+                                                        32)
         mid_gray_rgb_values = high_mid_gray_rgb_values - low_mid_gray_rgb_values
     print(f"INFO: Middle gray RGB values (normalized):\n"
           f"      RED:   {mid_gray_rgb_values[0]}\n"
@@ -162,27 +192,22 @@ def density_wb(image_data, region, colourspace_weights,
           file=sys.stderr)
     # apply mults to channel densities to balance them
     mid_mult = max(mid_gray_rgb_values)
-    red_channel_mid_gray = image_data[:, :, 0].copy()
-    green_channel_mid_gray = image_data[:, :, 1].copy()
-    blue_channel_mid_gray = image_data[:, :, 2].copy()
-    rc_change = mid_gray_rgb_values[0] / mid_mult
-    gc_change = mid_gray_rgb_values[1] / mid_mult
-    bc_change = mid_gray_rgb_values[2] / mid_mult
-    red_channel_mid_gray *= rc_change
-    green_channel_mid_gray *= gc_change
-    blue_channel_mid_gray *= bc_change
-    new_image_data = np.stack([red_channel_mid_gray,
-                              green_channel_mid_gray,
-                              blue_channel_mid_gray],
-                             axis=2)
-    # print out total aggregate change
+    if mid_mult == 0.0:
+        mid_mult = 1.0
+    rc = mid_gray_rgb_values[0] / mid_mult
+    gc = mid_gray_rgb_values[1] / mid_mult
+    bc = mid_gray_rgb_values[2] / mid_mult
+    # print out change
     print(f"ADJUSTMENT: Middle gray adjustment:\n"
-          f"          RED:   {rc_change}\n"
-          f"          GREEN: {gc_change}\n"
-          f"          BLUE:  {bc_change}",
+          f"          RED:   {rc}\n"
+          f"          GREEN: {gc}\n"
+          f"          BLUE:  {bc}",
           file=sys.stderr)
-    # return image data and tuple representing adjustments in rgb
-    return new_image_data, (rc_change, gc_change, bc_change)
+    adjustment = {
+        "type": "mult",
+        "values": (rc, gc, bc)
+    }
+    return adjustment
 
 
 def density_balance_gain(image_data, region, colourspace_weights,
@@ -201,12 +226,11 @@ def density_balance_gain(image_data, region, colourspace_weights,
     if custom_point:
         print(f"CUSTOM: Custom white point: {custom_point}",
               file=sys.stderr)
-        wb_lum_rgb_values = image_data[custom_point[1],
-                                       custom_point[0]]
+        wb_lum_rgb_values = image_data[custom_point[1], custom_point[0]]
     else:
         # update analysis region
         analysis_region = image_data[region[0][1]:region[1][1],
-                                       region[0][0]:region[1][0]]
+                                     region[0][0]:region[1][0]]
         # find brightest luminance point and balance around it
         wb_lum_values = np.dot(analysis_region, colourspace_weights)
         wb_lum_y = 0
@@ -216,9 +240,11 @@ def density_balance_gain(image_data, region, colourspace_weights,
                                                   wb_lum_values.shape)
         else:
             wb_lum_y, wb_lum_x = np.unravel_index(np.argmax(wb_lum_values),
-                                                  wb_lum_values.shape) 
-        wb_lum_rgb_values = analysis_region[wb_lum_y,
-                                            wb_lum_x]
+                                                  wb_lum_values.shape)
+        wb_lum_rgb_values = average_sample_point(analysis_region,
+                                                 wb_lum_x,
+                                                 wb_lum_y,
+                                                 32)
     print(f"INFO: Final {"black" if black_point else "white"} balance values:\n"
           f"      RED:   {wb_lum_rgb_values[0]}\n"
           f"      GREEN: {wb_lum_rgb_values[1]}\n"
@@ -226,38 +252,45 @@ def density_balance_gain(image_data, region, colourspace_weights,
           file=sys.stderr)
     # always apply final balance around green channel
     wb_mult = wb_lum_rgb_values[1]
-    red_channel_wb_final = image_data[:, :, 0].copy()
-    green_channel_wb_final = image_data[:, :, 1].copy()
-    blue_channel_wb_final = image_data[:, :, 2].copy()
-    rc_wb = wb_mult / wb_lum_rgb_values[0]
-    gc_wb = wb_mult / wb_lum_rgb_values[1]
-    bc_wb = wb_mult / wb_lum_rgb_values[2]
-    red_channel_wb_final *= rc_wb
-    green_channel_wb_final *= gc_wb
-    blue_channel_wb_final *= bc_wb
-    new_image_data = np.stack([red_channel_wb_final,
-                               green_channel_wb_final,
-                               blue_channel_wb_final],
-                              axis=2)
+    rc = wb_mult / (wb_lum_rgb_values[0] if wb_lum_rgb_values[0] != 0.0 else 1.0)
+    gc = wb_mult / (wb_lum_rgb_values[1] if wb_lum_rgb_values[1] != 0.0 else 1.0)
+    bc = wb_mult / (wb_lum_rgb_values[2] if wb_lum_rgb_values[2] != 0.0 else 1.0)
     print(f"ADJUSTMENT: Final {"black" if black_point else "white"} balance:\n"
-          f"          RED:   {rc_wb}\n"
-          f"          GREEN: {gc_wb}\n"
-          f"          BLUE:  {bc_wb}",
+          f"          RED:   {rc}\n"
+          f"          GREEN: {gc}\n"
+          f"          BLUE:  {bc}",
           file=sys.stderr)
-    # return new_image_data and tuple containing adjustments in rgb
-    return new_image_data, (rc_wb, gc_wb, bc_wb)
+    adjustment = {
+        "type": "mult",
+        "values": (rc, gc, bc)
+    }
+    return adjustment
 
 
-def density_custom_gain(image_data, custom_gain: tuple[float, float, float]):
-    """
-    Apply arbitrary multiplication across the three RGB colour channels.
-    """
-    red_channel = image_data[:, :, 0].copy() * custom_gain[0]
-    green_channel = image_data[:, :, 1].copy() * custom_gain[1]
-    blue_channel = image_data[:, :, 2].copy() * custom_gain[2]
-    new_image_data = np.stack([red_channel,
-                               green_channel,
-                               blue_channel],
-                              axis=2)
-    # return only new image data; we must already have the adjustments
-    return new_image_data
+def process_all_adjustments(image_data, adjustments):
+    print("PROCESS: applying all adjustments to create final image...",
+          file=sys.stderr)
+    working_data = image_data.copy()
+    for adjustment in adjustments:
+        type = adjustment["type"]
+        if type == "invert_to_density":
+            print("PROCESS: invert to density",
+                  file=sys.stderr)
+            working_data = invert_to_density(working_data)
+        if type == "density_to_luminance":
+            print("PROCESS: density to luminance",
+                  file=sys.stderr)
+            working_data = density_to_luminance(working_data)
+        if type == "add":
+            print(f"PROCESS: addition\n"
+                  f"         {tuple(float(x) for x in adjustment["values"])}",
+                  file=sys.stderr)
+            working_data = apply_addition(working_data,
+                                          adjustment["values"])
+        if type == "mult" or type == "gain":
+            print(f"PROCESS: gain\n"
+                  f"         {tuple(float(x) for x in adjustment["values"])}",
+                  file=sys.stderr)
+            working_data = apply_gain(working_data,
+                                      adjustment["values"])
+    return working_data
