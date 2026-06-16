@@ -245,7 +245,8 @@ def main():
                          compressionargs={"level":9},
                          predictor=3,
                          extratags=[icc_tag] if icc_tag else [])
-        print(f"Done processing {args.image_path}!", file=sys.stderr)
+        print(f"Saved inversion to {args.output_path}", file=sys.stderr)
+    print(f"Done processing {args.image_path}!", file=sys.stderr)
 
 
 if __name__ == "__main__":
