@@ -87,7 +87,7 @@ def process_negative(source_image, args):
                                                                       args.blur,
                                                                       0))
 
-    # perform adjustments in working colour space
+    # use reference rec2020 luminance weights
     rec2020_lum_weights = np.array([0.2627, 0.6780, 0.05903])
     # store adjustments in array for application and export
     adjustments = []
@@ -234,9 +234,9 @@ def main():
                            True)
         else:
             print("WARN: Image is in linear Rec2020 colour space,\n"
-                  "      but you have not provided an ICC profile to embed.\n"
-                  "      Most image viewers will NOT display it correctly\n"
-                  "      without an embedded gamma 1.0 Rec2020 ICC profile.",
+-                 "      but you have not provided an ICC profile to embed.\n"
+-                 "      Most image viewers will NOT display it correctly\n"
+-                 "      without an embedded gamma 1.0 Rec2020 ICC profile.",
                   file=sys.stderr)
         tifffile.imwrite(args.output_path,
                          final_image.astype(np.float16),

@@ -1,8 +1,10 @@
 # environment
 .env/
 
+# working folders
+__pycache__/
 # working files
-__pycache__
+*.icc
 *.swp
 *.swo
 *.tiff
