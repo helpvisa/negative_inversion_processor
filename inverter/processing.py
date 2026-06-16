@@ -48,7 +48,6 @@ def average_sample_point(image_data, sample_x, sample_y, kernel):
     return average / (kernel * kernel)
     
 
-
 def invert_to_density(image_data):
     """
     Invert a given film negative into a linear density space where it can
@@ -101,8 +100,6 @@ def emulsion_wb(image_data, region, colourspace_weights,
                                               16)
     else:
         # find max luminance value in region
-        # TODO: maybe we normalize and find value closest to RGB(1.0, 1.0, 1.0)?
-        #       we could do this for all min/max checks
         pre_lum_values = np.dot(analysis_region, colourspace_weights)
         # and find point of maximum luminance
         max_lum_y, max_lum_x = np.unravel_index(np.argmax(pre_lum_values),
@@ -157,7 +154,7 @@ def density_wb(image_data, region, colourspace_weights,
         # update analysis region from current working image
         analysis_region = image_data[region[0][1]:region[1][1],
                                      region[0][0]:region[1][0]]
-        # normalize image data
+        # normalize luminance data
         post_lum_values = np.dot(analysis_region,
                                  colourspace_weights)
         max_post_lum_y, max_post_lum_x = np.unravel_index(np.argmax(post_lum_values),
@@ -165,16 +162,13 @@ def density_wb(image_data, region, colourspace_weights,
         max_post_lum_rgb_values = analysis_region[max_post_lum_y,
                                                   max_post_lum_x]
         normalization_factor = np.max(max_post_lum_rgb_values)
-        # re-assign to avoid overwiting image_data, since
-        # analysis_region references image_data directly
-        analysis_region = analysis_region / normalization_factor
-        low_gray = np.array([0.09, 0.09, 0.09], dtype=np.float32)
-        high_gray = np.array([0.36, 0.36, 0.36], dtype=np.float32)
+        post_lum_values = post_lum_values / normalization_factor
+        analysis_regoin = analysis_region / normalization_factor
+        low_gray = 0.9
+        high_gray = 0.36
         # find the closest luminance point to 'middle gray'
-        proximity_to_low_gray = np.linalg.norm(analysis_region - low_gray,
-                                               axis=-1)
-        proximity_to_high_gray = np.linalg.norm(analysis_region - high_gray,
-                                                axis=-1)
+        proximity_to_low_gray = np.abs(post_lum_values - low_gray)
+        proximity_to_high_gray = np.abs(post_lum_values - high_gray)
         low_mid_gray_y, low_mid_gray_x = np.unravel_index(np.argmin(proximity_to_low_gray),
                                                           proximity_to_low_gray.shape)
         high_mid_gray_y, high_mid_gray_x = np.unravel_index(np.argmin(proximity_to_high_gray),
@@ -290,7 +284,7 @@ def density_balance_gain(image_data, region, colourspace_weights,
           f"      BLUE:  {wb_lum_rgb_values[2]}",
           file=sys.stderr)
     # always apply final balance around green channel
-    wb_mult = wb_lum_rgb_values[1]
+    wb_mult = np.max(wb_lum_rgb_values) #wb_lum_rgb_values[1]
     rc = wb_mult / (wb_lum_rgb_values[0] if wb_lum_rgb_values[0] != 0.0 else 1.0)
     gc = wb_mult / (wb_lum_rgb_values[1] if wb_lum_rgb_values[1] != 0.0 else 1.0)
     bc = wb_mult / (wb_lum_rgb_values[2] if wb_lum_rgb_values[2] != 0.0 else 1.0)
