@@ -19,7 +19,7 @@ def parse_user_arguments():
                         help="Preset to apply to image (no analysis)")
     parser.add_argument('--generate-preset',
                         action='store_true',
-                        help="Generate an inversion preset.")
+                        help="Generate an inversion preset at the output path.")
     # icc profile embedding
     parser.add_argument('--icc', '-p',
                         type=str, default=None,

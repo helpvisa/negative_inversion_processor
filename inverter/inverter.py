@@ -6,9 +6,10 @@ import rawpy
 import tifffile
 from scipy import ndimage
 import parse_cli_arguments
+from presets import save_preset, load_preset
 from processing import (invert_to_density, density_to_luminance,
-                        emulsion_wb, density_wb, density_balance_gain,
-                        apply_gain,
+                        emulsion_wb, density_wb, density_grayworld,
+                        density_balance_gain, apply_gain,
                         process_all_adjustments)
 
 
@@ -61,7 +62,7 @@ def process_negative(source_image, args):
     if type(args) is dict:
         args = SimpleNamespace(**args)
 
-    # create working image from source
+    # create working image from source and apply green channel exponent
     working_image = source_image.copy()
 
     if args.resize:
@@ -118,11 +119,16 @@ def process_negative(source_image, args):
 
         if not args.skip_auto_adjustments:
             # find spot closest to middle gray for density adjustment
-            custom_gray_point = args.custom_gray_point if \
-                                    args.custom_gray_point else \
-                                    None
-            new_adjustment = density_wb(working_image, analysis_bounding_box,
-                                        rec2020_lum_weights, custom_gray_point)
+            # custom_gray_point = args.custom_gray_point if \
+            #                         args.custom_gray_point else \
+            #                         None
+            # new_adjustment = density_wb(working_image, analysis_bounding_box,
+            #                             rec2020_lum_weights, custom_gray_point)
+            # working_image = apply_gain(working_image, new_adjustment["values"])
+            # adjustments.append(new_adjustment.copy())
+            # use gray world approach to fully neutralize any colour casts
+            new_adjustment = density_grayworld(working_image,
+                                               analysis_bounding_box)
             working_image = apply_gain(working_image, new_adjustment["values"])
             adjustments.append(new_adjustment.copy())
             # apply an automated white balance based on white point
@@ -205,34 +211,41 @@ def main():
 
     # process negatives
     source_image = load_raw_image(args.image_path).astype(np.float32) / 65535.0
-    adjustments = process_negative(source_image, args)
-    adjustments.append({"type": "gain", "values": (args.exposure_comp,
-                                                   args.exposure_comp,
-                                                   args.exposure_comp)})
-    final_image = process_all_adjustments(source_image, adjustments)
-    # save image to disk
-    # do we possess an icc profile to embed?
-    icc_tag = None
-    if args.icc:
-        with open(args.icc, "rb") as icc_file:
-            icc_profile_bytes = icc_file.read()
-            icc_tag = (34675, 7,
-                       len(icc_profile_bytes), icc_profile_bytes,
-                       True)
+    adjustments = []
+    if args.preset:
+        adjustments = load_preset(args.preset)
     else:
-        print("WARN: Image is in linear Rec2020 colour space,\n"
-              "      but you have not provided an ICC profile to embed.\n"
-              "      Most image viewers will NOT display it correctly\n"
-              "      without an embedded gamma 1.0 Rec2020 ICC profile.",
-              file=sys.stderr)
-    tifffile.imwrite(args.output_path,
-                     final_image.astype(np.float16),
-                     photometric="rgb",
-                     compression="zlib",
-                     compressionargs={"level":9},
-                     predictor=3,
-                     extratags=[icc_tag] if icc_tag else [])
-    print(f"Done processing {args.image_path}!", file=sys.stderr)
+        adjustments = process_negative(source_image, args)
+    if args.generate_preset:
+        save_preset(args.output_path, adjustments)
+    else:
+        adjustments.append({"type": "gain", "values": (args.exposure_comp,
+                                                       args.exposure_comp,
+                                                       args.exposure_comp)})
+        final_image = process_all_adjustments(source_image, adjustments)
+        # save image to disk
+        # do we possess an icc profile to embed?
+        icc_tag = None
+        if args.icc:
+            with open(args.icc, "rb") as icc_file:
+                icc_profile_bytes = icc_file.read()
+                icc_tag = (34675, 7,
+                           len(icc_profile_bytes), icc_profile_bytes,
+                           True)
+        else:
+            print("WARN: Image is in linear Rec2020 colour space,\n"
+                  "      but you have not provided an ICC profile to embed.\n"
+                  "      Most image viewers will NOT display it correctly\n"
+                  "      without an embedded gamma 1.0 Rec2020 ICC profile.",
+                  file=sys.stderr)
+        tifffile.imwrite(args.output_path,
+                         final_image.astype(np.float16),
+                         photometric="rgb",
+                         compression="zlib",
+                         compressionargs={"level":9},
+                         predictor=3,
+                         extratags=[icc_tag] if icc_tag else [])
+        print(f"Done processing {args.image_path}!", file=sys.stderr)
 
 
 if __name__ == "__main__":

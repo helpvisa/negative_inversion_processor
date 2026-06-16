@@ -1,0 +1,35 @@
+[
+  {
+    "_comment": "Based on roll of 2026 Eastman Kodak Kodacolor 110",
+    "type": "mult",
+    "values": [
+      1.0,
+      1.7097704410552979,
+      3.054478883743286
+    ]
+  },
+  {
+    "type": "invert_to_density",
+    "values": null
+  },
+  {
+    "type": "mult",
+    "values": [
+      0.7679507304250884,
+      1.0,
+      0.9437965571513582
+    ]
+  },
+  {
+    "type": "mult",
+    "values": [
+      1.5481971502304077,
+      1.0,
+      0.9677878022193909
+    ]
+  },
+  {
+    "type": "density_to_luminance",
+    "values": null
+  }
+]

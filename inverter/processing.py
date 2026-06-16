@@ -60,7 +60,10 @@ def invert_to_density(image_data):
     inverse_y_points = np.log10(1.0 / inverse_x_points)
     inverse_spline = scipy.interpolate.CubicSpline(inverse_x_points,
                                                    inverse_y_points)
-    return inverse_spline(image_data)
+    # normalize rgb values to avoid weird inversion errors
+    image_max = np.max(image_data)
+    normalized_image_data = image_data / image_max
+    return inverse_spline(normalized_image_data)
 
 
 def density_to_luminance(image_data):
@@ -93,9 +96,9 @@ def emulsion_wb(image_data, region, colourspace_weights,
         print(f"CUSTOM: Custom black point: {custom_black_point}",
               file=sys.stderr)
         max_rgb_values = average_sample_point(image_data,
-                                              custom_black_point[1],
                                               custom_black_point[0],
-                                              32)
+                                              custom_black_point[1],
+                                              16)
     else:
         # find max luminance value in region
         # TODO: maybe we normalize and find value closest to RGB(1.0, 1.0, 1.0)?
@@ -179,11 +182,11 @@ def density_wb(image_data, region, colourspace_weights,
         low_mid_gray_rgb_values = average_sample_point(analysis_region,
                                                        low_mid_gray_x,
                                                        low_mid_gray_y,
-                                                       32)
+                                                       16)
         high_mid_gray_rgb_values = average_sample_point(analysis_region,
                                                         high_mid_gray_x,
                                                         high_mid_gray_y,
-                                                        32)
+                                                        16)
         mid_gray_rgb_values = high_mid_gray_rgb_values - low_mid_gray_rgb_values
     print(f"INFO: Middle gray RGB values (normalized):\n"
           f"      RED:   {mid_gray_rgb_values[0]}\n"
@@ -199,6 +202,39 @@ def density_wb(image_data, region, colourspace_weights,
     bc = mid_gray_rgb_values[2] / mid_mult
     # print out change
     print(f"ADJUSTMENT: Middle gray adjustment:\n"
+          f"          RED:   {rc}\n"
+          f"          GREEN: {gc}\n"
+          f"          BLUE:  {bc}",
+          file=sys.stderr)
+    adjustment = {
+        "type": "mult",
+        "values": (rc, gc, bc)
+    }
+    return adjustment
+
+
+def density_grayworld(image_data, region):
+    """
+    Average all colour values inside the region of the provided image. The
+    remaining RGB value should represent middle gray, and can be used to
+    correct colour casts.
+    """
+    analysis_region = image_data[region[0][1]:region[1][1],
+                                 region[0][0]:region[1][0]]
+    gray_mean = np.mean(analysis_region, axis=(0, 1))
+    print(f"INFO: Gray world RGB values:\n"
+          f"      RED:   {gray_mean[0]}\n"
+          f"      GREEN: {gray_mean[1]}\n"
+          f"      BLUE:  {gray_mean[2]}",
+          file=sys.stderr)
+    mult = max(gray_mean)
+    if mult == 0.0:
+        mult = 1.0
+    rc = gray_mean[0] / mult
+    gc = gray_mean[1] / mult
+    bc = gray_mean[2] / mult
+    # print out change
+    print(f"ADJUSTMENT: Gray world adjustment:\n"
           f"          RED:   {rc}\n"
           f"          GREEN: {gc}\n"
           f"          BLUE:  {bc}",
@@ -226,7 +262,10 @@ def density_balance_gain(image_data, region, colourspace_weights,
     if custom_point:
         print(f"CUSTOM: Custom white point: {custom_point}",
               file=sys.stderr)
-        wb_lum_rgb_values = image_data[custom_point[1], custom_point[0]]
+        wb_lum_rgb_values = average_sample_point(image_data,
+                                                 custom_point[0],
+                                                 custom_point[1],
+                                                 16)
     else:
         # update analysis region
         analysis_region = image_data[region[0][1]:region[1][1],
@@ -244,7 +283,7 @@ def density_balance_gain(image_data, region, colourspace_weights,
         wb_lum_rgb_values = average_sample_point(analysis_region,
                                                  wb_lum_x,
                                                  wb_lum_y,
-                                                 32)
+                                                 16)
     print(f"INFO: Final {"black" if black_point else "white"} balance values:\n"
           f"      RED:   {wb_lum_rgb_values[0]}\n"
           f"      GREEN: {wb_lum_rgb_values[1]}\n"
