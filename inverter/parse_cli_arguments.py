@@ -58,17 +58,24 @@ def parse_user_arguments():
     parser.add_argument('--blue-balance', '-B',
                         type=float, default=1.0,
                         help="Custom blue balance (in density space).")
-    parser.add_argument('--custom-white-point',
+    parser.add_argument('--custom-max-point',
                         nargs=2,
+                        metavar=("X1", "Y1"),
                         type=int, default=None,
-                        help="XY of point to balance around white, space-separated.")
-    parser.add_argument('--custom-gray-point',
+                        help="XY point of peak luminance, space-separated.")
+    parser.add_argument('--custom-gray-points',
+                        nargs=4,
+                        type=int, default=None,
+                        metavar=("X1", "Y1", "X2", "Y2"),
+                        help="XY points from two unique gray points, space separated "
+                             "(order is X Y X Y).")
+    parser.add_argument('--custom-wb-point',
                         nargs=2,
+                        metavar=("X1", "Y1"),
                         type=int, default=None,
-                        help="XY of point to balance around gray, space-separated.")
-    parser.add_argument('--custom-black-point',
-                        nargs=2,
-                        type=int, default=None,
-                        help="XY of point to balance around black, space-separated"
+                        help="XY point around which to white balance, space-separated"
                              "(this is usually the emulsion itself).")
+    parser.add_argument('--shift-blacks',
+                        action='store_true',
+                        help="Shift all blacks back to zero after inversion.")
     return parser.parse_args()

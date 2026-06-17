@@ -9,8 +9,8 @@ import parse_cli_arguments
 from presets import save_preset, load_preset
 from processing import (invert_to_density, density_to_luminance,
                         emulsion_wb, density_wb, density_grayworld,
-                        density_balance_gain, apply_gain,
-                        process_all_adjustments)
+                        density_balance_gain, apply_gain, apply_addition,
+                        shift_blacks_to_zero, process_all_adjustments)
 
 
 def load_raw_image(path):
@@ -51,9 +51,9 @@ def process_negative(source_image, args):
         - `red_balance`
         - `green_balance`
         - `blue_balance`
-        - `custom_white_point`
-        - `custom_gray_point`
-        - `custom_black_point`
+        - `custom_max_point`
+        - `custom_gray_points`
+        - `custom_wb_point`
 
     See `parse_cli_arguments.py` for more detailed information about each of
     the individual arguments available in the `args` dictionary.
@@ -68,15 +68,17 @@ def process_negative(source_image, args):
     if args.resize:
         args.analysis_width = int(math.floor(args.analysis_width * args.resize))
         args.analysis_height = int(math.floor(args.analysis_height * args.resize))
-        if args.custom_white_point:
-            args.custom_white_point[0] = int(math.floor(args.custom_white_point[0] * args.resize))
-            args.custom_white_point[1] = int(math.floor(args.custom_white_point[1] * args.resize))
-        if args.custom_gray_point:
-            args.custom_gray_point[0] = int(math.floor(args.custom_gray_point[0] * args.resize))
-            args.custom_gray_point[1] = int(math.floor(args.custom_gray_point[1] * args.resize))
-        if args.custom_black_point:
-            args.custom_black_point[0] = int(math.floor(args.custom_black_point[0] * args.resize))
-            args.custom_black_point[1] = int(math.floor(args.custom_black_point[1] * args.resize))
+        if args.custom_max_point:
+            args.custom_max_point[0] = int(math.floor(args.custom_max_point[0] * args.resize))
+            args.custom_max_point[1] = int(math.floor(args.custom_max_point[1] * args.resize))
+        if args.custom_gray_points:
+            args.custom_gray_points[0] = int(math.floor(args.custom_gray_points[0] * args.resize))
+            args.custom_gray_points[1] = int(math.floor(args.custom_gray_points[1] * args.resize))
+            args.custom_gray_points[2] = int(math.floor(args.custom_gray_points[2] * args.resize))
+            args.custom_gray_points[3] = int(math.floor(args.custom_gray_points[3] * args.resize))
+        if args.custom_wb_point:
+            args.custom_wb_point[0] = int(math.floor(args.custom_wb_point[0] * args.resize))
+            args.custom_wb_point[1] = int(math.floor(args.custom_wb_point[1] * args.resize))
         resize_factor = (args.resize, args.resize, 1)
         working_image = ndimage.zoom(working_image,
                                      resize_factor,
@@ -103,11 +105,11 @@ def process_negative(source_image, args):
 
     # perform pre-inversion white balance
     if not args.skip_auto_adjustments:
-        custom_black_point = args.custom_black_point if \
-                                 args.custom_black_point else \
+        custom_wb_point = args.custom_wb_point if \
+                                 args.custom_wb_point else \
                                  None
         new_adjustment = emulsion_wb(working_image, analysis_bounding_box,
-                                     rec2020_lum_weights, custom_black_point)
+                                     rec2020_lum_weights, custom_wb_point)
         working_image = apply_gain(working_image, new_adjustment["values"])
         adjustments.append(new_adjustment.copy())
 
@@ -118,27 +120,31 @@ def process_negative(source_image, args):
         adjustments.append(new_adjustment.copy())
 
         if not args.skip_auto_adjustments:
-            # find spot closest to middle gray for density adjustment
-            # custom_gray_point = args.custom_gray_point if \
-            #                         args.custom_gray_point else \
-            #                         None
-            # new_adjustment = density_wb(working_image, analysis_bounding_box,
-            #                             rec2020_lum_weights, custom_gray_point)
-            # working_image = apply_gain(working_image, new_adjustment["values"])
-            # adjustments.append(new_adjustment.copy())
-            # use gray world approach to fully neutralize any colour casts
-            new_adjustment = density_grayworld(working_image,
-                                               analysis_bounding_box)
-            working_image = apply_gain(working_image, new_adjustment["values"])
-            adjustments.append(new_adjustment.copy())
+            # two approachs:
+            #   if gray points supplied:
+            #     use them to neutralize colour casts
+            #   otherwise:
+            #     use gray world approach to fully neutralize any colour casts
+            if args.custom_gray_points:
+                new_adjustment = density_wb(working_image,
+                                            analysis_bounding_box,
+                                            rec2020_lum_weights,
+                                            args.custom_gray_points)
+                working_image = apply_gain(working_image, new_adjustment["values"])
+                adjustments.append(new_adjustment.copy())
+            else:
+                new_adjustment = density_grayworld(working_image,
+                                                analysis_bounding_box)
+                working_image = apply_gain(working_image, new_adjustment["values"])
+                adjustments.append(new_adjustment.copy())
             # apply an automated white balance based on white point
-            custom_white_point = args.custom_white_point if \
-                                     args.custom_white_point else \
+            custom_max_point = args.custom_max_point if \
+                                     args.custom_max_point else \
                                      None
             new_adjustment = density_balance_gain(working_image,
                                                   analysis_bounding_box,
                                                   rec2020_lum_weights,
-                                                  custom_white_point)
+                                                  custom_max_point)
             working_image = apply_gain(working_image, new_adjustment["values"])
             adjustments.append(new_adjustment.copy())
 
@@ -164,37 +170,14 @@ def process_negative(source_image, args):
         adjustments.append(new_adjustment.copy())
 
     # shift blacks back to zero
-    # TODO: re-enable under args flag
-    # final_analysis_region = working_image[analysis_bounding_box[0][1]:analysis_bounding_box[1][1],
-    #                                       analysis_bounding_box[0][0]:analysis_bounding_box[1][0]]
-    # final_lum_values = np.dot(final_analysis_region, rec2020_lum_weights)
-    # final_lum_x, final_lum_y = np.unravel_index(np.argmin(final_lum_values),
-    #                                             final_lum_values.shape)
-    # final_lum_rgb_values = final_analysis_region[final_lum_x, final_lum_y]
-    # final_adjustment = (-final_lum_rgb_values[0],
-    #                     -final_lum_rgb_values[1],
-    #                     -final_lum_rgb_values[2])
-    # working_image = apply_addition(working_image, final_adjustment)
-    # apply output exposure compensation
-    # working_image = working_image * args.exposure_comp
+    if args.shift_blacks:
+        new_adjustment = shift_blacks_to_zero(working_image,
+                                              analysis_bounding_box,
+                                              rec2020_lum_weights)
+        working_image = apply_addition(working_image, new_adjustment["values"])
+        adjustments.append(new_adjustment.copy())
 
-    # display the analysis region and points if debug toggle enabled
-    # TODO: break this behaviour out of the processing loop and fix it
-    # if args.debug_analysis_region:
-    #     final_image[analysis_start_y-32:analysis_start_y+32,
-    #                 analysis_start_x-32:analysis_start_x+32] = [1.0, 0.0, 0.0]
-    #     final_image[analysis_end_y-32:analysis_end_y+32,
-    #                 analysis_end_x-32:analysis_end_x+32] = [1.0, 0.0, 0.0]
-    #     if args.custom_black_point:
-    #         final_image[args.custom_black_point[1]-32:args.custom_black_point[1]+32,
-    #                     args.custom_black_point[0]-32:args.custom_black_point[0]+32] = [0.0, 1.0, 0.0]
-    #     if args.custom_white_point:
-    #         final_image[args.custom_white_point[1]-32:args.custom_white_point[1]+32,
-    #                     args.custom_white_point[0]-32:args.custom_white_point[0]+32] = [0.0, 0.0, 1.0]
-    #     if args.custom_gray_point:
-    #         final_image[args.custom_gray_point[1]-32:args.custom_gray_point[1]+32,
-    #                     args.custom_gray_point[0]-32:args.custom_gray_point[0]+32] = [0.0, 1.0, 1.0]
-    # finally, we return image data
+    # TODO: display the analysis region and points if debug toggle enabled
     return adjustments
 
 
@@ -219,9 +202,10 @@ def main():
     if args.generate_preset:
         save_preset(args.output_path, adjustments)
     else:
-        adjustments.append({"type": "gain", "values": (args.exposure_comp,
-                                                       args.exposure_comp,
-                                                       args.exposure_comp)})
+        if args.exposure_comp != 1.0:
+            adjustments.append({"type": "gain", "values": (args.exposure_comp,
+                                                        args.exposure_comp,
+                                                        args.exposure_comp)})
         final_image = process_all_adjustments(source_image, adjustments)
         # save image to disk
         # do we possess an icc profile to embed?
