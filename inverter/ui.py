@@ -1,70 +1,115 @@
-from functools import partial
-import tkinter as tk
-from tkinter import filedialog
-from PIL import Image, ImageTk
+import sys
+import math
 import numpy as np
-from inverter import process_negative
+from PySide6.QtCore import Qt, Slot
+from PySide6.QtGui import QImage, QPixmap
+from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget,
+                               QVBoxLayout, QHBoxLayout,
+                               QLabel, QPushButton, QFileDialog)
+import colour
+from scipy import ndimage
+import parse_cli_arguments
+from inverter import load_raw_image, process_negative
+from processing import process_all_adjustments
 
 
-# cute little wrapper class for Tk
-class App(tk.Frame):
-    def __init__(self, master=None):
-        super().__init__(master)
-        self.pack()
+# derive from QWidget to create a custom updateable image class
+class ImageDisplayWidget(QWidget):
+    def __init__(self, parent=None):
+        super(ImageDisplayWidget, self).__init__(parent)
+        self.setMinimumSize(1200, 800)
+
+        # replace with QGraphicsView?
+        layout = QVBoxLayout(self)
+        self.image_label = QLabel()
+        self.image_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.image_label)
+        self.setLayout(layout)
+
+    @Slot()
+    def update_image(self):
+        """
+        Modify numpy pixel data array and update the GUI to display the new
+        image
+        """
+        sRGB_conversion = colour.RGB_to_XYZ(
+            self.image_array,
+            colour.RGB_COLOURSPACES['ITU-R BT.2020'],
+            colour.CCS_ILLUMINANTS['CIE 1931 2 Degree Standard Observer']['D65'],
+            apply_cctf_decoding=False
+        )
+        display_image = colour.XYZ_to_RGB(
+            sRGB_conversion,
+            colour.RGB_COLOURSPACES['sRGB'],
+            apply_cctf_encoding=True
+        )
+        display_image = np.clip(display_image, a_min=0, a_max=1)
+        q_image = QImage(np.multiply(display_image, 255).astype(np.uint8),
+                         display_image.shape[1],
+                         display_image.shape[0],
+                         3 * display_image.shape[1],
+                         QImage.Format.Format_RGB888)
+        # convert to QPixmap for display
+        q_pixmap = QPixmap.fromImage(q_image)
+        self.image_label.setPixmap(q_pixmap.scaled(self.image_label.size(),
+                                                Qt.KeepAspectRatio,
+                                                Qt.SmoothTransformation))
 
 
-# global variables
-LOADED_NEGATIVE = None
+class CentralPane(QWidget):
+    def __init__(self, parent=None):
+        super(CentralPane, self).__init__(parent)
+        self.args = parse_cli_arguments.parse_user_arguments()
+        # finagle the args in an ugly way to avoid preview breakage
+        # I should really convert a_width/height to a float that insets
+        # the analysis region automatically based on actual working_image size
+        self.args.analysis_width = int(math.floor(self.args.analysis_width * 0.25))
+        self.args.analysis_height = int(math.floor(self.args.analysis_height * 0.25))
+        self.args.resize = 1.0
+        
+        self.load_layout = QHBoxLayout()
+        self.current_file_label = QLabel("NO FILE LOADED")
+        self.load_button = QPushButton("Load Image")
+        self.load_layout.addWidget(self.current_file_label)
+        self.load_layout.addWidget(self.load_button)
+
+        self.layout = QVBoxLayout()
+        self.image_preview = ImageDisplayWidget(self)
+        self.preview_button = QPushButton("Preview Image")
+        self.layout.addLayout(self.load_layout)
+        self.layout.addWidget(self.image_preview)
+        self.layout.addWidget(self.preview_button)
+        self.setLayout(self.layout)
+
+        self.load_button.clicked.connect(self.load_raw_file)
+        self.preview_button.clicked.connect(self.preview_inverted_negative)
+
+    def load_raw_file(self):
+        self.current_raw, discarded_text = QFileDialog.getOpenFileName()
+        self.source_image = load_raw_image(self.current_raw).astype(np.float32) / 65535.0
+        self.source_image = ndimage.zoom(self.source_image, (0.25, 0.25, 1), order=3)
+        self.current_file_label.setText(self.current_raw)
+
+    def preview_inverted_negative(self):
+        # this absolutely, unquestionably needs to be threaded
+        self.adjustments = process_negative(self.source_image,
+                                            self.args)
+        self.image_preview.image_array = process_all_adjustments(self.source_image,
+                                                                    self.adjustments)
+        self.image_preview.update_image()
 
 
-# callback functions
-def load_negative():
-    global LOADED_NEGATIVE
-    LOADED_NEGATIVE = filedialog.askopenfilename()
-    print(LOADED_NEGATIVE)
+class MainWindow(QMainWindow):
+    def __init__(self, parent=None):
+        super(MainWindow, self).__init__(parent)
+        self.setWindowTitle("Film Negative Inverter")
+        self.resize(800, 600)
+        self.central_pane = CentralPane()
+        self.setCentralWidget(self.central_pane)
 
 
-def preview_negative(canvas_widget: tk.Canvas, image_id):
-    args = {
-        "image_path": LOADED_NEGATIVE,
-        "resize": (600, 400),
-        "analysis_width": 3800,
-        "analysis_height": 2400,
-        "exposure_comp": 0.5,
-        "skip_inversion": False,
-        "skip_auto_adjustments": False,
-        "debug_analysis_region": False,
-        "red_balance": 1.0,
-        "green_balance": 1.0,
-        "blue_balance": 1.0,
-        "custom_white_point": None,
-        "custom_gray_point": None,
-        "custom_black_point": None
-    }
-    print(args["image_path"])
-    processed_neg = process_negative(args)
-    pil_image = Image.fromarray(processed_neg.astype(np.uint8))
-    tk_image = ImageTk.PhotoImage(pil_image)
-    canvas_widget.itemconfig(image_id, image=tk_image)
-
-
-# initialize gui
-app = App()
-
-# define gui
-app.master.title("Neg Inverter")
-app.master.minsize(800, 600)
-choose_negative = tk.Button(app, text="Load Negative",
-                          command=load_negative)
-choose_negative.pack()
-image_canvas = tk.Canvas(app, width=600, height=400)
-image_id = image_canvas.create_image(0, 0, anchor="nw")
-image_canvas.pack()
-conversion_action = partial(preview_negative, image_canvas, image_id)
-convert_negative = tk.Button(app, text="Convert",
-                             command=conversion_action)
-convert_negative.pack()
-# filedialog.askopenfile(mode='r')
-
-# run gui
-app.mainloop()
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    window = MainWindow()
+    window.show()
+    sys.exit(app.exec())

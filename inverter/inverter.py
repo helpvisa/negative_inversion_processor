@@ -14,7 +14,7 @@ from processing import (invert_to_density, density_to_luminance,
 
 
 def load_raw_image(path):
-    print(f"Processing image: {path}", file=sys.stderr)
+    print(f"Loading image: {path}", file=sys.stderr)
     with rawpy.imread(path) as raw:
         # read in camera sensor data at 16bpp int with D65 white balance
         d65_balance = raw.daylight_whitebalance
@@ -65,7 +65,7 @@ def process_negative(source_image, args):
     # create working image from source and apply green channel exponent
     working_image = source_image.copy()
 
-    if args.resize:
+    if args.resize and args.resize != 1.0:
         args.analysis_width = int(math.floor(args.analysis_width * args.resize))
         args.analysis_height = int(math.floor(args.analysis_height * args.resize))
         if args.custom_max_point:
