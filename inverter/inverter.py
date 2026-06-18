@@ -168,7 +168,7 @@ def process_negative(source_image, args):
 
     # final optional user tweaks
     # normalize final image back into 0-1 range to prevent clipping
-    if args.normalize_output:
+    if args.no_normalize_output:
         new_adjustment = normalize_image(working_image, analysis_bounding_box,
                                         rec2020_lum_weights)
         working_image = apply_addition(working_image, new_adjustment["values"])
