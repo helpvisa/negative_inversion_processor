@@ -75,6 +75,12 @@ def parse_user_arguments():
                         type=int, default=None,
                         help="XY point around which to white balance, space-separated"
                              "(this is usually the emulsion itself).")
+    parser.add_argument('--exponent',
+                        type=float, default=1.0,
+                        help="Adjust global contrast (default 1.0).")
+    parser.add_argument('--normalize-output',
+                        action='store_true',
+                        help="Normalize final output between 0 and 1 (default false).")
     parser.add_argument('--shift-blacks',
                         action='store_true',
                         help="Shift all blacks back to zero after inversion.")

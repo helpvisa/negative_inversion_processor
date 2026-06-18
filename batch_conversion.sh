@@ -2,12 +2,12 @@
 
 # example of how to perform batch conversions using the CLI utility
 # $1 is directory, $2 is raw file extension (NEF, for example)
-# $3 is preset profile, $4 is directory of neg_invert project (default current)
-# $5 is output directory
+# $3 is preset profile, $4 is output directory
+# $5 is directory of neg_invert project (default current)
 
 WORK_DIR="."
-if [ -n "$4" ]; then
-    WORK_DIR="$4"
+if [ -n "$5" ]; then
+    WORK_DIR="$5"
 fi
 
 for item in "$1"/*."$2"; do
@@ -15,5 +15,5 @@ for item in "$1"/*."$2"; do
         -p "$WORK_DIR/profile.icc" \
         --preset "$3" \
         "$item" \
-        "$5/$(basename $item .$2).tiff"
+        "$4/$(basename $item .$2).tiff"
 done

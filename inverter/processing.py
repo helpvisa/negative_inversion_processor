@@ -29,6 +29,18 @@ def apply_gain(image_data, adjustment: tuple[float, float, float]):
     return np.stack([red_new, green_new, blue_new], axis=2)
 
 
+def apply_power(image_data, adjustment: tuple[float, float, float]):
+    """
+    Raise image channels to a given exponent and return the result.
+
+    Adjustment is a tuple representing (r, g, b)
+    """
+    red_new = np.pow(image_data[:, :, 0].copy(), adjustment[0])
+    green_new = np.pow(image_data[:, :, 1].copy(), adjustment[1])
+    blue_new = np.pow(image_data[:, :, 2].copy(), adjustment[2])
+    return np.stack([red_new, green_new, blue_new], axis=2)
+
+
 def average_sample_point(image_data, sample_x, sample_y, kernel):
     """
     Average a box around a given sample point and return the value
@@ -56,7 +68,8 @@ def invert_to_density(image_data):
     """
     # we calculate density from "transmittance" using log10(1/x)
     # see https://abpy.github.io/2023/08/20/color-neg.html
-    inverse_x_points = np.array([0.001, 0.25, 0.5, 0.75, 1.0])
+    inverse_x_points = np.array([0.001, 0.25, 0.5, 0.75, 1.0,
+                                 1.25, 1.5, 1.75, 2.0])
     inverse_y_points = np.log10(1.0 / inverse_x_points)
     inverse_spline = scipy.interpolate.CubicSpline(inverse_x_points,
                                                    inverse_y_points)
@@ -77,7 +90,7 @@ def density_to_luminance(image_data):
 
 
 def emulsion_wb(image_data, region, colourspace_weights,
-                custom_wb_point=None):
+                custom_wb_point=None, exponent=1.0):
     """
     White balance a non-inverted camera negative to the "brightest point"
     visible within the bounding box of the provided region. This becomes the
@@ -113,11 +126,11 @@ def emulsion_wb(image_data, region, colourspace_weights,
           f"      GREEN: {max_rgb_values[1]}\n"
           f"      BLUE:  {max_rgb_values[2]}",
           file=sys.stderr)
-    # apply initial balance around channel with strongest cast
-    mult = np.max(max_rgb_values)
-    rc = mult / max_rgb_values[0]
-    gc = mult / max_rgb_values[1]
-    bc = mult / max_rgb_values[2]
+    # always apply initial balance around green channel
+    mult = max_rgb_values[1]
+    rc = (mult / max_rgb_values[0]) * exponent
+    gc = exponent
+    bc = (mult / max_rgb_values[2]) * exponent
     print(f"ADJUSTMENT: Balance changes (pre-inversion):\n"
           f"          RED:   {rc}\n"
           f"          GREEN: {gc}\n"
@@ -195,8 +208,8 @@ def density_wb(image_data, region, colourspace_weights,
           f"      GREEN: {mid_gray_rgb_values[1]}\n"
           f"      BLUE:  {mid_gray_rgb_values[2]}",
           file=sys.stderr)
-    # apply mults to channel densities to balance them
-    mid_mult = max(mid_gray_rgb_values)
+    # always apply mults around green channel
+    mid_mult = mid_gray_rgb_values[1]
     if mid_mult == 0.0:
         mid_mult = 1.0
     rc = mid_gray_rgb_values[0] / mid_mult
@@ -229,7 +242,8 @@ def density_grayworld(image_data, region):
           f"      GREEN: {gray_mean[1]}\n"
           f"      BLUE:  {gray_mean[2]}",
           file=sys.stderr)
-    mult = max(gray_mean)
+    # always balance around green channel
+    mult = gray_mean[1]
     if mult == 0.0:
         mult = 1.0
     rc = gray_mean[0] / mult
@@ -249,16 +263,12 @@ def density_grayworld(image_data, region):
 
 
 def density_balance_gain(image_data, region, colourspace_weights,
-                         custom_point=None, black_point=False):
+                         custom_point=None):
     """
     Multiply the individual colour channels until equalized at a given point.
     Neutralizes colour casts in highlights and shadows.
 
-    `custom_point` can be either a white or black point in density space.
-
-    The optional `black_point` parameter is only used when `custom_point` is
-    not provided, in the case that a black point should be determined
-    automatically.
+    `custom_point` is a point in density space.
     """
     wb_lum_rgb_values = None
     if custom_point:
@@ -276,12 +286,8 @@ def density_balance_gain(image_data, region, colourspace_weights,
         wb_lum_values = np.dot(analysis_region, colourspace_weights)
         wb_lum_y = 0
         wb_lum_x = 0
-        if black_point:
-            wb_lum_y, wb_lum_x = np.unravel_index(np.argmin(wb_lum_values),
-                                                  wb_lum_values.shape)
-        else:
-            wb_lum_y, wb_lum_x = np.unravel_index(np.argmax(wb_lum_values),
-                                                  wb_lum_values.shape)
+        wb_lum_y, wb_lum_x = np.unravel_index(np.argmax(wb_lum_values),
+                                                wb_lum_values.shape)
         wb_lum_rgb_values = average_sample_point(analysis_region,
                                                  wb_lum_x,
                                                  wb_lum_y,
@@ -292,11 +298,11 @@ def density_balance_gain(image_data, region, colourspace_weights,
           f"      BLUE:  {wb_lum_rgb_values[2]}",
           file=sys.stderr)
     # always apply final balance around green channel
-    wb_mult = np.max(wb_lum_rgb_values) #wb_lum_rgb_values[1]
-    rc = wb_mult / (wb_lum_rgb_values[0] if wb_lum_rgb_values[0] != 0.0 else 1.0)
-    gc = wb_mult / (wb_lum_rgb_values[1] if wb_lum_rgb_values[1] != 0.0 else 1.0)
-    bc = wb_mult / (wb_lum_rgb_values[2] if wb_lum_rgb_values[2] != 0.0 else 1.0)
-    print(f"ADJUSTMENT: Final {"black" if black_point else "white"} balance:\n"
+    wb_mult = wb_lum_rgb_values[1]
+    rc = (wb_mult / wb_lum_rgb_values[0])
+    gc = 1.0
+    bc = (wb_mult / wb_lum_rgb_values[2])
+    print(f"ADJUSTMENT: Final balance:\n"
           f"          RED:   {rc}\n"
           f"          GREEN: {gc}\n"
           f"          BLUE:  {bc}",
@@ -304,6 +310,21 @@ def density_balance_gain(image_data, region, colourspace_weights,
     adjustment = {
         "type": "mult",
         "values": (rc, gc, bc)
+    }
+    return adjustment
+
+
+def normalize_image(image_data, region, colourspace_weights):
+    analysis_region = image_data[region[0][1]:region[1][1],
+                                 region[0][0]:region[1][0]]
+    lum_values = np.dot(analysis_region, colourspace_weights)
+    lum_x, lum_y = np.unravel_index(np.argmax(lum_values),
+                                    lum_values.shape)
+    lum_values = analysis_region[lum_x, lum_y]
+    factor = np.max(lum_values)
+    adjustment = {
+        "type": "mult",
+        "values": (1/factor, 1/factor, 1/factor)
     }
     return adjustment
 
@@ -348,4 +369,10 @@ def process_all_adjustments(image_data, adjustments):
                   file=sys.stderr)
             working_data = apply_gain(working_data,
                                       adjustment["values"])
+        if type == "pow" or type == "power":
+            print(f"PROCESS: power\n"
+                  f"         {tuple(float(x) for x in adjustment["values"])}",
+                  file=sys.stderr)
+            working_data = apply_power(working_data,
+                                       adjustment["values"])
     return working_data

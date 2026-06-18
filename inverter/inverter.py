@@ -10,7 +10,8 @@ from presets import save_preset, load_preset
 from processing import (invert_to_density, density_to_luminance,
                         emulsion_wb, density_wb, density_grayworld,
                         density_balance_gain, apply_gain, apply_addition,
-                        shift_blacks_to_zero, process_all_adjustments)
+                        normalize_image, shift_blacks_to_zero,
+                        process_all_adjustments)
 
 
 def load_raw_image(path):
@@ -65,6 +66,18 @@ def process_negative(source_image, args):
     # create working image from source and apply green channel exponent
     working_image = source_image.copy()
 
+    # cross-check analysis_width against orientation of image
+    if (args.analysis_width > args.analysis_height and \
+        working_image.shape[1] < working_image.shape[0]) or \
+       (args.analysis_width < args.analysis_height and \
+        working_image.shape[1] > working_image.shape[0]):
+        print("Analysis box is not aligned with image orientation; swizzling.",
+              file=sys.stderr)
+        temp_width = args.analysis_width
+        args.analysis_width = args.analysis_height
+        args.analysis_height = temp_width
+       
+
     if args.resize and args.resize != 1.0:
         args.analysis_width = int(math.floor(args.analysis_width * args.resize))
         args.analysis_height = int(math.floor(args.analysis_height * args.resize))
@@ -109,7 +122,8 @@ def process_negative(source_image, args):
                                  args.custom_wb_point else \
                                  None
         new_adjustment = emulsion_wb(working_image, analysis_bounding_box,
-                                     rec2020_lum_weights, custom_wb_point)
+                                     rec2020_lum_weights, custom_wb_point,
+                                     args.exponent)
         working_image = apply_gain(working_image, new_adjustment["values"])
         adjustments.append(new_adjustment.copy())
 
@@ -120,23 +134,6 @@ def process_negative(source_image, args):
         adjustments.append(new_adjustment.copy())
 
         if not args.skip_auto_adjustments:
-            # two approachs:
-            #   if gray points supplied:
-            #     use them to neutralize colour casts
-            #   otherwise:
-            #     use gray world approach to fully neutralize any colour casts
-            if args.custom_gray_points:
-                new_adjustment = density_wb(working_image,
-                                            analysis_bounding_box,
-                                            rec2020_lum_weights,
-                                            args.custom_gray_points)
-                working_image = apply_gain(working_image, new_adjustment["values"])
-                adjustments.append(new_adjustment.copy())
-            else:
-                new_adjustment = density_grayworld(working_image,
-                                                analysis_bounding_box)
-                working_image = apply_gain(working_image, new_adjustment["values"])
-                adjustments.append(new_adjustment.copy())
             # apply an automated white balance based on white point
             custom_max_point = args.custom_max_point if \
                                      args.custom_max_point else \
@@ -169,6 +166,13 @@ def process_negative(source_image, args):
         working_image = density_to_luminance(working_image)
         adjustments.append(new_adjustment.copy())
 
+    # final optional user tweaks
+    # normalize final image back into 0-1 range to prevent clipping
+    if args.normalize_output:
+        new_adjustment = normalize_image(working_image, analysis_bounding_box,
+                                        rec2020_lum_weights)
+        working_image = apply_addition(working_image, new_adjustment["values"])
+        adjustments.append(new_adjustment.copy())
     # shift blacks back to zero
     if args.shift_blacks:
         new_adjustment = shift_blacks_to_zero(working_image,

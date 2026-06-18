@@ -89,6 +89,8 @@ class CentralPane(QWidget):
         self.source_image = load_raw_image(self.current_raw).astype(np.float32) / 65535.0
         self.source_image = ndimage.zoom(self.source_image, (0.25, 0.25, 1), order=3)
         self.current_file_label.setText(self.current_raw)
+        self.image_preview.image_array = self.source_image
+        self.image_preview.update_image()
 
     def preview_inverted_negative(self):
         # this absolutely, unquestionably needs to be threaded
