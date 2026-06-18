@@ -51,12 +51,15 @@ def parse_user_arguments():
                         help="Show bounds of analysis region.")
     parser.add_argument('--red-balance', '-R',
                         type=float, default=1.0,
+                        metavar="FLOAT",
                         help="Custom red balance (in density space).")
     parser.add_argument('--green-balance', '-G',
                         type=float, default=1.0,
+                        metavar="FLOAT",
                         help="Custom green balance (in density space).")
     parser.add_argument('--blue-balance', '-B',
                         type=float, default=1.0,
+                        metavar="FLOAT",
                         help="Custom blue balance (in density space).")
     parser.add_argument('--custom-max-point',
                         nargs=2,
