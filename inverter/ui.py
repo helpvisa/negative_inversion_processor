@@ -10,7 +10,7 @@ import colour
 from scipy import ndimage
 import parse_cli_arguments
 from inverter import load_raw_image, process_negative
-from processing import process_all_adjustments
+from processing import convert_to_sRGB, process_all_adjustments
 
 
 # derive from QWidget to create a custom updateable image class
@@ -32,17 +32,7 @@ class ImageDisplayWidget(QWidget):
         Modify numpy pixel data array and update the GUI to display the new
         image
         """
-        sRGB_conversion = colour.RGB_to_XYZ(
-            self.image_array,
-            colour.RGB_COLOURSPACES['ITU-R BT.2020'],
-            colour.CCS_ILLUMINANTS['CIE 1931 2 Degree Standard Observer']['D65'],
-            apply_cctf_decoding=False
-        )
-        display_image = colour.XYZ_to_RGB(
-            sRGB_conversion,
-            colour.RGB_COLOURSPACES['sRGB'],
-            apply_cctf_encoding=True
-        )
+        display_image, sRGB_profile = convert_to_sRGB(self.image_array)
         display_image = np.clip(display_image, a_min=0, a_max=1)
         q_image = QImage(np.multiply(display_image, 255).astype(np.uint8),
                          display_image.shape[1],

@@ -13,6 +13,8 @@ def parse_user_arguments():
     parser.add_argument('output_path', type=str, default=None,
                         nargs='?',
                         help="Output path for final processed image.")
+    parser.add_argument('--tiff-format', type=str, default="f16",
+                        help="Format in which to save output (f16, f32, u8, u16).")
     # create and load presets
     parser.add_argument('--preset',
                         type=str, default=None,

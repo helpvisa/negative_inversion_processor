@@ -2,30 +2,17 @@ import sys
 import math
 from types import SimpleNamespace
 import numpy as np
-import rawpy
 import tifffile
 from scipy import ndimage
 import parse_cli_arguments
 from presets import save_preset, load_preset
-from processing import (invert_to_density, density_to_luminance,
-                        emulsion_wb, density_wb, density_grayworld,
-                        density_balance_gain, apply_gain, apply_addition,
+from PIL import ImageCms
+from processing import (load_raw_image, save_image,
+                        invert_to_density, density_to_luminance,
+                        emulsion_wb, density_balance_gain,
+                        apply_gain, apply_addition,
                         normalize_image, shift_blacks_to_zero,
-                        process_all_adjustments)
-
-
-def load_raw_image(path):
-    print(f"Loading image: {path}", file=sys.stderr)
-    with rawpy.imread(path) as raw:
-        # read in camera sensor data at 16bpp int with D65 white balance
-        d65_balance = raw.daylight_whitebalance
-        return raw.postprocess(use_camera_wb=False,
-                               user_wb=d65_balance,
-                               no_auto_bright=True,
-                               half_size=False,
-                               output_bps=16,
-                               gamma=(1.0, 1.0),
-                               output_color=rawpy.ColorSpace.Rec2020)
+                        convert_to_sRGB, process_all_adjustments)
 
 
 def process_negative(source_image, args):
@@ -213,27 +200,19 @@ def main():
         final_image = process_all_adjustments(source_image, adjustments)
         # save image to disk
         # do we possess an icc profile to embed?
-        icc_tag = None
+        icc_profile = None
         if args.icc:
             with open(args.icc, "rb") as icc_file:
-                icc_profile_bytes = icc_file.read()
-                icc_tag = (34675, 7,
-                           len(icc_profile_bytes), icc_profile_bytes,
-                           True)
+                icc_profile = icc_file.read()
         else:
-            print("WARN: Image is in linear Rec2020 colour space,\n"
--                 "      but you have not provided an ICC profile to embed.\n"
--                 "      Most image viewers will NOT display it correctly\n"
--                 "      without an embedded gamma 1.0 Rec2020 ICC profile.",
+            print("WARN: Image was processed in linear Rec2020 colour space,\n"
+                  "      but you have not provided an ICC profile to embed.\n"
+                  "      Image will be converted to and saved as sRGB.",
                   file=sys.stderr)
-        tifffile.imwrite(args.output_path,
-                         final_image.astype(np.float16),
-                         photometric="rgb",
-                         compression="zlib",
-                         compressionargs={"level":9},
-                         predictor=3,
-                         extratags=[icc_tag] if icc_tag else [])
-        print(f"Saved inversion to {args.output_path}", file=sys.stderr)
+            final_image, icc_profile = convert_to_sRGB(final_image)
+            # convert the icc profile into bytes for tifffile to accept it
+            icc_profile = ImageCms.ImageCmsProfile(icc_profile).tobytes()
+        save_image(final_image, args.output_path, args.tiff_format, icc_profile)
     print(f"Done processing {args.image_path}!", file=sys.stderr)
 
 

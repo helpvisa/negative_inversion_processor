@@ -1,6 +1,67 @@
 import sys
+import rawpy
+import tifffile
 import scipy
 import numpy as np
+from colour import RGB_to_XYZ, XYZ_to_RGB, RGB_COLOURSPACES, CCS_ILLUMINANTS
+from PIL import ImageCms
+
+
+def load_raw_image(path):
+    print(f"Loading image: {path}", file=sys.stderr)
+    with rawpy.imread(path) as raw:
+        # read in camera sensor data at 16bpp int with D65 white balance
+        d65_balance = raw.daylight_whitebalance
+        return raw.postprocess(use_camera_wb=False,
+                               user_wb=d65_balance,
+                               no_auto_bright=True,
+                               half_size=False,
+                               output_bps=16,
+                               gamma=(1.0, 1.0),
+                               output_color=rawpy.ColorSpace.Rec2020)
+
+
+def save_image(image_data, output_path, tiff_format, icc_profile):
+    # default case; save as f32 (input format from processing pipeline)
+    image_to_save = image_data
+    # set predictor if floating point (default)
+    p_val = 3
+    if tiff_format == "u8":
+        image_data = np.clip(image_data, a_min=0, a_max=1)
+        image_to_save = np.multiply(image_data, 255).astype(np.uint8)
+        p_val = None
+    elif tiff_format == "u16":
+        image_data = np.clip(image_data, a_min=0, a_max=1)
+        image_to_save = np.multiply(image_data, 65535).astype(np.uint16)
+        p_val = None
+    elif tiff_format == "f16":
+        image_to_save = image_data.astype(np.float16)
+    tifffile.imwrite(output_path,
+                     image_to_save,
+                     photometric="rgb",
+                     compression="zlib",
+                     compressionargs={"level":9},
+                     predictor=p_val,
+                     iccprofile=icc_profile)
+    print(f"Saved inversion to {output_path}", file=sys.stderr)
+
+
+def convert_to_sRGB(image_data):
+    # convert our image data from Linear Rec2020 to sRGB
+    sRGB_conversion = RGB_to_XYZ(
+        image_data,
+        RGB_COLOURSPACES['ITU-R BT.2020'],
+        CCS_ILLUMINANTS['CIE 1931 2 Degree Standard Observer']['D65'],
+        apply_cctf_decoding=False
+    )
+    sRGB_image = XYZ_to_RGB(
+        sRGB_conversion,
+        RGB_COLOURSPACES['sRGB'],
+        apply_cctf_encoding=True
+    )
+    # create and return an sRGB colour profile along with it
+    sRGB_profile = ImageCms.createProfile("sRGB")
+    return sRGB_image, sRGB_profile
 
 
 def apply_addition(image_data, adjustment: tuple[float, float, float]):
@@ -353,23 +414,23 @@ def process_all_adjustments(image_data, adjustments):
             print("PROCESS: invert to density",
                   file=sys.stderr)
             working_data = invert_to_density(working_data)
-        if type == "density_to_luminance":
+        elif type == "density_to_luminance":
             print("PROCESS: density to luminance",
                   file=sys.stderr)
             working_data = density_to_luminance(working_data)
-        if type == "add" or type == "addition":
+        elif type == "add" or type == "addition":
             print(f"PROCESS: addition\n"
                   f"         {tuple(float(x) for x in adjustment["values"])}",
                   file=sys.stderr)
             working_data = apply_addition(working_data,
                                           adjustment["values"])
-        if type == "mult" or type == "gain":
+        elif type == "mult" or type == "gain":
             print(f"PROCESS: gain\n"
                   f"         {tuple(float(x) for x in adjustment["values"])}",
                   file=sys.stderr)
             working_data = apply_gain(working_data,
                                       adjustment["values"])
-        if type == "pow" or type == "power":
+        elif type == "pow" or type == "power":
             print(f"PROCESS: power\n"
                   f"         {tuple(float(x) for x in adjustment["values"])}",
                   file=sys.stderr)
