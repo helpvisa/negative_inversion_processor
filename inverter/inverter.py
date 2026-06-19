@@ -53,21 +53,8 @@ def process_negative(source_image, args):
     # create working image from source and apply green channel exponent
     working_image = source_image.copy()
 
-    # cross-check analysis_width against orientation of image
-    if (args.analysis_width > args.analysis_height and \
-        working_image.shape[1] < working_image.shape[0]) or \
-       (args.analysis_width < args.analysis_height and \
-        working_image.shape[1] > working_image.shape[0]):
-        print("Analysis box is not aligned with image orientation; swizzling.",
-              file=sys.stderr)
-        temp_width = args.analysis_width
-        args.analysis_width = args.analysis_height
-        args.analysis_height = temp_width
-       
-
+    # should probably be reworked to use UV of image
     if args.resize and args.resize != 1.0:
-        args.analysis_width = int(math.floor(args.analysis_width * args.resize))
-        args.analysis_height = int(math.floor(args.analysis_height * args.resize))
         if args.custom_max_point:
             args.custom_max_point[0] = int(math.floor(args.custom_max_point[0] * args.resize))
             args.custom_max_point[1] = int(math.floor(args.custom_max_point[1] * args.resize))
@@ -90,10 +77,12 @@ def process_negative(source_image, args):
     adjustments = []
     # determine and build analysis region
     image_height, image_width, image_channels = working_image.shape
-    analysis_start_x = (image_width - args.analysis_width) // 2
-    analysis_end_x = analysis_start_x + args.analysis_width
-    analysis_start_y = (image_height - args.analysis_height) // 2
-    analysis_end_y = analysis_start_y + args.analysis_height
+    analysis_width = int(image_width * args.analysis_inset)
+    analysis_height = int(image_height * args.analysis_inset)
+    analysis_start_x = (image_width - analysis_width) // 2
+    analysis_end_x = analysis_start_x + analysis_width
+    analysis_start_y = (image_height - analysis_height) // 2
+    analysis_end_y = analysis_start_y + analysis_height
     # store as array of [x,y] arrays
     analysis_bounding_box = [[analysis_start_x, analysis_start_y],
                              [analysis_end_x, analysis_end_y]]

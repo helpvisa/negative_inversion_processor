@@ -43,9 +43,9 @@ def parse_user_arguments():
     parser.add_argument('--resize',
                         type=float, default=1.0,
                         help="Resize the image for the processing pipeline.")
-    parser.add_argument('--analysis-width', '-W',
-                        type=int, default=4000,
-                        help="Size of analysis bounding box (width).")
+    parser.add_argument('--analysis-inset', '-A',
+                        type=float, default=0.5,
+                        help="How far to inset analysis bounding box (default 0.5).")
     parser.add_argument('--analysis-height', '-H',
                         type=int, default=2666,
                         help="Size of analysis bounding box (height).")
