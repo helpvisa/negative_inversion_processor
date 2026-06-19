@@ -7,10 +7,10 @@ import parse_cli_arguments
 from presets import save_preset, load_preset
 from PIL import ImageCms
 from colour_management import (convert_to_sRGB, ocio_load_and_create_config,
-                               ocio_convert_colorspace, ocio_bake_icc)
+                               ocio_convert_colorspace)
 from processing import (load_raw_image, save_image,
                         invert_to_density, density_to_luminance,
-                        emulsion_wb, density_balance_gain,
+                        white_balance, density_balance,
                         apply_gain, apply_addition,
                         normalize_image, shift_blacks_to_zero,
                         process_all_adjustments)
@@ -40,8 +40,7 @@ def process_negative(source_image, args):
         - `red_balance`
         - `green_balance`
         - `blue_balance`
-        - `custom_max_point`
-        - `custom_wb_point`
+        - `wb_point`
 
     See `parse_cli_arguments.py` for more detailed information about each of
     the individual arguments available in the `args` dictionary.
@@ -55,12 +54,9 @@ def process_negative(source_image, args):
 
     # should probably be reworked to use UV of image
     if args.resize and args.resize != 1.0:
-        if args.custom_max_point:
-            args.custom_max_point[0] = int(math.floor(args.custom_max_point[0] * args.resize))
-            args.custom_max_point[1] = int(math.floor(args.custom_max_point[1] * args.resize))
-        if args.custom_wb_point:
-            args.custom_wb_point[0] = int(math.floor(args.custom_wb_point[0] * args.resize))
-            args.custom_wb_point[1] = int(math.floor(args.custom_wb_point[1] * args.resize))
+        if args.wb_point:
+            args.wb_point[0] = int(math.floor(args.wb_point[0] * args.resize))
+            args.wb_point[1] = int(math.floor(args.wb_point[1] * args.resize))
         resize_factor = (args.resize, args.resize, 1)
         working_image = ndimage.zoom(working_image,
                                      resize_factor,
@@ -89,12 +85,9 @@ def process_negative(source_image, args):
 
     # perform pre-inversion white balance
     if not args.skip_auto_adjustments:
-        custom_wb_point = args.custom_wb_point if \
-                                 args.custom_wb_point else \
-                                 None
-        new_adjustment = emulsion_wb(working_image, analysis_bounding_box,
-                                     rec2020_lum_weights, custom_wb_point,
-                                     args.exponent)
+        new_adjustment = white_balance(working_image, analysis_bounding_box,
+                                       rec2020_lum_weights, args.wb_point,
+                                       mode='mult')
         working_image = apply_gain(working_image, new_adjustment["values"])
         adjustments.append(new_adjustment.copy())
 
@@ -105,14 +98,16 @@ def process_negative(source_image, args):
         adjustments.append(new_adjustment.copy())
 
         if not args.skip_auto_adjustments:
-            # apply an automated white balance based on white point
-            custom_max_point = args.custom_max_point if \
-                                     args.custom_max_point else \
-                                     None
-            new_adjustment = density_balance_gain(working_image,
-                                                  analysis_bounding_box,
-                                                  rec2020_lum_weights,
-                                                  custom_max_point)
+            # adjust the individual densities to eliminate colour casts
+            new_adjustment = density_balance(working_image,
+                                             analysis_bounding_box,
+                                             rec2020_lum_weights, args.exponent)
+            working_image = apply_gain(working_image, new_adjustment["values"])
+            adjustments.append(new_adjustment.copy())
+            # and perform another final white balance
+            new_adjustment = white_balance(working_image, analysis_bounding_box,
+                                           rec2020_lum_weights, args.wb_point,
+                                           mode='mult')
             working_image = apply_gain(working_image, new_adjustment["values"])
             adjustments.append(new_adjustment.copy())
 

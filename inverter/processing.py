@@ -133,12 +133,21 @@ def density_to_luminance(image_data):
     return lum_spline(image_data)
 
 
-def emulsion_wb(image_data, region, colourspace_weights,
-                custom_wb_point=None, exponent=1.0):
+def find_brightest_luminance_spot(image_data, colourspace_weights):
+    # find max luminance value in region
+    pre_lum_values = np.dot(image_data, colourspace_weights)
+    # and find point of maximum luminance
+    max_lum_y, max_lum_x = np.unravel_index(np.argmax(pre_lum_values),
+                                            pre_lum_values.shape)
+    # now grab the rgb values at that point
+    return average_sample_point(image_data, max_lum_x, max_lum_y, 16)
+
+
+def white_balance(image_data, region, colourspace_weights,
+                  custom_wb_point=None, mode='mult'):
     """
-    White balance a non-inverted camera negative to the "brightest point"
-    visible within the bounding box of the provided region. This becomes the
-    inverted film's new "black point".
+    White balance a "brightest point" visible within the bounding box of the
+    provided region. This becomes the inverted film's new "black point".
 
     In most cases, this is none other than the unexposed film base itself.
 
@@ -156,81 +165,60 @@ def emulsion_wb(image_data, region, colourspace_weights,
                                               custom_wb_point[1],
                                               16)
     else:
-        # find max luminance value in region
-        pre_lum_values = np.dot(analysis_region, colourspace_weights)
-        # and find point of maximum luminance
-        max_lum_y, max_lum_x = np.unravel_index(np.argmax(pre_lum_values),
-                                                pre_lum_values.shape)
-        # now grab the rgb values at that point
-        max_rgb_values = average_sample_point(analysis_region,
-                                              max_lum_x, max_lum_y,
-                                              16)
-    print(f"INFO: Balance (pre-inversion):\n"
-          f"      RED:   {max_rgb_values[0]}\n"
-          f"      GREEN: {max_rgb_values[1]}\n"
-          f"      BLUE:  {max_rgb_values[2]}",
-          file=sys.stderr)
-    # always apply initial balance around green channel
-    mult = max_rgb_values[1]
-    rc = (mult / max_rgb_values[0]) * exponent
-    gc = exponent
-    bc = (mult / max_rgb_values[2]) * exponent
-    print(f"ADJUSTMENT: Balance changes (pre-inversion):\n"
-          f"          RED:   {rc}\n"
-          f"          GREEN: {gc}\n"
-          f"          BLUE:  {bc}",
+        max_rgb_values = find_brightest_luminance_spot(analysis_region,
+                                                       colourspace_weights)
+    # determine reference exponents for balance
+    factor = max_rgb_values[1]
+    if mode == 'add':
+        rc = factor - max_rgb_values[0]
+        gc = 1.0
+        bc = factor - max_rgb_values[2]
+    else:
+        rc = factor / max_rgb_values[0]
+        gc = 1.0
+        bc = factor / max_rgb_values[2]
+    print(f"ADJUSTMENT: Balancing whites ({mode} mode)\n"
+          f"            RED:   {rc}\n"
+          f"            GREEN: {gc}\n"
+          f"            BLUE:  {bc}",
           file=sys.stderr)
     adjustment = {
-        "type": "mult",
+        "type": mode,
         "values": (rc, gc, bc)
     }
     return adjustment
 
 
-def density_balance_gain(image_data, region, colourspace_weights,
-                         custom_point=None):
+def density_balance(image_data, region, colourspace_weights, exponent=1.0):
     """
     Multiply the individual colour channels until equalized at a given point.
     Neutralizes colour casts in highlights and shadows.
-
-    `custom_point` is a point in density space.
     """
-    wb_lum_rgb_values = None
-    if custom_point:
-        print(f"CUSTOM: Custom point: {custom_point}",
-              file=sys.stderr)
-        wb_lum_rgb_values = average_sample_point(image_data,
-                                                 custom_point[0],
-                                                 custom_point[1],
-                                                 16)
-    else:
-        # update analysis region
-        analysis_region = image_data[region[0][1]:region[1][1],
-                                     region[0][0]:region[1][0]]
-        # find brightest luminance point and balance around it
-        wb_lum_values = np.dot(analysis_region, colourspace_weights)
-        wb_lum_y = 0
-        wb_lum_x = 0
-        wb_lum_y, wb_lum_x = np.unravel_index(np.argmax(wb_lum_values),
-                                                wb_lum_values.shape)
-        wb_lum_rgb_values = average_sample_point(analysis_region,
-                                                 wb_lum_x,
-                                                 wb_lum_y,
-                                                 16)
-    print(f"INFO: Final peak values:\n"
-          f"      RED:   {wb_lum_rgb_values[0]}\n"
-          f"      GREEN: {wb_lum_rgb_values[1]}\n"
-          f"      BLUE:  {wb_lum_rgb_values[2]}",
-          file=sys.stderr)
-    # always apply final balance around green channel
-    wb_mult = wb_lum_rgb_values[1]
-    rc = (wb_mult / wb_lum_rgb_values[0])
-    gc = 1.0
-    bc = (wb_mult / wb_lum_rgb_values[2])
-    print(f"ADJUSTMENT: Final balance:\n"
-          f"          RED:   {rc}\n"
-          f"          GREEN: {gc}\n"
-          f"          BLUE:  {bc}",
+    analysis_region = image_data[region[0][1]:region[1][1],
+                                 region[0][0]:region[1][0]]
+    brightest_spot = find_brightest_luminance_spot(analysis_region,
+                                                   colourspace_weights)
+    # estimate two median values in the image
+    r_med_1 = np.median(image_data[:, :, 0])
+    g_med_1 = np.median(image_data[:, :, 1])
+    b_med_1 = np.median(image_data[:, :, 2])
+    r_med_2 = brightest_spot[0] / 24.0
+    g_med_2 = brightest_spot[1] / 24.0
+    b_med_2 = brightest_spot[2] / 24.0
+    # determine their density using green channel
+    clear = [r_med_1, g_med_1, b_med_1]
+    dense = [r_med_2, g_med_2, b_med_2]
+    if (dense[1] < clear[1]):
+        clear, dense = dense, clear
+    density_ratio = dense[1] / clear[1]
+    # these become our balancing exponents
+    rc = (clear[0] / dense[0]) * density_ratio * exponent
+    gc = (clear[1] / dense[1]) * density_ratio * exponent
+    bc = (clear[2] / dense[2]) * density_ratio * exponent
+    print(f"ADJUSTMENT: Density balance:\n"
+          f"            RED:   {rc}\n"
+          f"            GREEN: {gc}\n"
+          f"            BLUE:  {bc}",
           file=sys.stderr)
     adjustment = {
         "type": "mult",
@@ -242,10 +230,8 @@ def density_balance_gain(image_data, region, colourspace_weights,
 def normalize_image(image_data, region, colourspace_weights):
     analysis_region = image_data[region[0][1]:region[1][1],
                                  region[0][0]:region[1][0]]
-    lum_values = np.dot(analysis_region, colourspace_weights)
-    lum_x, lum_y = np.unravel_index(np.argmax(lum_values),
-                                    lum_values.shape)
-    lum_values = analysis_region[lum_x, lum_y]
+    lum_values = find_brightest_luminance_spot(analysis_region,
+                                               colourspace_weights)
     factor = np.max(lum_values)
     adjustment = {
         "type": "mult",
@@ -269,7 +255,7 @@ def shift_blacks_to_zero(image_data, region, colourspace_weights):
 
 
 def process_all_adjustments(image_data, adjustments):
-    print("PROCESS: applying all adjustments to create final image...",
+    print("Applying all adjustments to create final image...",
           file=sys.stderr)
     working_data = image_data.copy()
     for adjustment in adjustments:

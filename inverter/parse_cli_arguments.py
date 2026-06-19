@@ -73,19 +73,14 @@ def parse_user_arguments():
                         type=float, default=1.0,
                         metavar="FLOAT",
                         help="Custom blue balance (in density space).")
-    parser.add_argument('--custom-max-point',
-                        nargs=2,
-                        metavar=("X1", "Y1"),
-                        type=int, default=None,
-                        help="XY point of peak luminance, space-separated.")
-    parser.add_argument('--custom-wb-point',
+    parser.add_argument('--wb-point',
                         nargs=2,
                         metavar=("X1", "Y1"),
                         type=int, default=None,
                         help="XY point around which to white balance, space-separated"
                              "(this is usually the emulsion itself).")
     parser.add_argument('--exponent',
-                        type=float, default=1.0,
+                        type=float, default=1.5,
                         help="Adjust global contrast (default 1.0).")
     parser.add_argument('--no-normalize-output',
                         action='store_false',
