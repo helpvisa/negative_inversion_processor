@@ -115,7 +115,7 @@ def process_negative(source_image, args):
             # and perform another final white balance
             new_adjustment = white_balance(working_image, analysis_bounding_box,
                                            rec2020_lum_weights, args.wb_point,
-                                           mode='mult')
+                                           mode='add')
             working_image = apply_gain(working_image, new_adjustment["values"])
             adjustments.append(new_adjustment.copy())
 

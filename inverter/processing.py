@@ -143,6 +143,16 @@ def find_brightest_luminance_spot(image_data, colourspace_weights):
     return average_sample_point(image_data, max_lum_x, max_lum_y, 16)
 
 
+def find_darkest_luminance_spot(image_data, colourspace_weights):
+    # find min luminance value in region
+    pre_lum_values = np.dot(image_data, colourspace_weights)
+    # and find point of min luminance
+    max_lum_y, max_lum_x = np.unravel_index(np.argmin(pre_lum_values),
+                                            pre_lum_values.shape)
+    # now grab the rgb values at that point
+    return average_sample_point(image_data, max_lum_x, max_lum_y, 16)
+
+
 def white_balance(image_data, region, colourspace_weights,
                   custom_wb_point=None, mode='mult'):
     """
@@ -170,9 +180,9 @@ def white_balance(image_data, region, colourspace_weights,
     # determine reference exponents for balance
     factor = max_rgb_values[1]
     if mode == 'add':
-        rc = -(1 - factor / max_rgb_values[0])
+        rc = factor - max_rgb_values[0]
         gc = 0
-        bc = -(1 - factor / max_rgb_values[2])
+        bc = factor - max_rgb_values[2]
     else:
         rc = factor / max_rgb_values[0]
         gc = 1.0
@@ -197,31 +207,25 @@ def density_balance(image_data, region, colourspace_weights,
     """
     analysis_region = image_data[region[0][1]:region[1][1],
                                  region[0][0]:region[1][0]]
-    brightest_spot = find_brightest_luminance_spot(analysis_region,
-                                                   colourspace_weights)
     if ref_points:
         clear = image_data[ref_points[1], ref_points[0]]
         dense = image_data[ref_points[3], ref_points[2]]
         print(f"CUSTOM: Custom reference points: {ref_points}",
               file=sys.stderr)
     else:
-        # estimate two median values in the image
-        r_med_1 = np.median(image_data[:, :, 0])
-        g_med_1 = np.median(image_data[:, :, 1])
-        b_med_1 = np.median(image_data[:, :, 2])
-        r_med_2 = brightest_spot[0]
-        g_med_2 = brightest_spot[1]
-        b_med_2 = brightest_spot[2]
-        dense = [r_med_1, g_med_1, b_med_1]
-        clear = [r_med_2, g_med_2, b_med_2]
+        # estimate two clear/dense values in the image
+        dense = find_brightest_luminance_spot(analysis_region,
+                                              colourspace_weights)
+        clear = find_darkest_luminance_spot(analysis_region,
+                                            colourspace_weights)
     # determine density using green channel
     if (dense[1] < clear[1]):
         clear, dense = dense, clear
-    density_ratio = dense[1] / clear[1]
+    density_ratio = clear[1] / dense[1]
     # these become our balancing exponents
-    rc = (clear[0] - dense[0]) / density_ratio + exponent
-    gc = (clear[1] - dense[1]) / density_ratio + exponent
-    bc = (clear[2] - dense[2]) / density_ratio + exponent
+    rc = (clear[0] / dense[0]) / density_ratio * exponent
+    gc = exponent
+    bc = (clear[2] / dense[2]) / density_ratio * exponent
     print(f"ADJUSTMENT: Density balance:\n"
           f"            RED:   {rc}\n"
           f"            GREEN: {gc}\n"
