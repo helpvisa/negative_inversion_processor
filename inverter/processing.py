@@ -3,8 +3,6 @@ import rawpy
 import tifffile
 import scipy
 import numpy as np
-from colour import RGB_to_XYZ, XYZ_to_RGB, RGB_COLOURSPACES, CCS_ILLUMINANTS
-from PIL import ImageCms
 
 
 def load_raw_image(path):
@@ -46,24 +44,9 @@ def save_image(image_data, output_path, tiff_format, icc_profile):
     print(f"Saved inversion to {output_path}", file=sys.stderr)
 
 
-def convert_to_sRGB(image_data):
-    # convert our image data from Linear Rec2020 to sRGB
-    sRGB_conversion = RGB_to_XYZ(
-        image_data,
-        RGB_COLOURSPACES['ITU-R BT.2020'],
-        CCS_ILLUMINANTS['CIE 1931 2 Degree Standard Observer']['D65'],
-        apply_cctf_decoding=False
-    )
-    sRGB_image = XYZ_to_RGB(
-        sRGB_conversion,
-        RGB_COLOURSPACES['sRGB'],
-        apply_cctf_encoding=True
-    )
-    # create and return an sRGB colour profile along with it
-    sRGB_profile = ImageCms.createProfile("sRGB")
-    return sRGB_image, sRGB_profile
-
-
+# many of the functions below should probably be altered to directly modify
+# image data instead of passing it all around and here and there
+# it would save on a lot of memory shuffling!
 def apply_addition(image_data, adjustment: tuple[float, float, float]):
     """
     Perform addition / subtraction to a given working image and return the
@@ -181,7 +164,7 @@ def emulsion_wb(image_data, region, colourspace_weights,
         # now grab the rgb values at that point
         max_rgb_values = average_sample_point(analysis_region,
                                               max_lum_x, max_lum_y,
-                                              8)
+                                              16)
     print(f"INFO: Balance (pre-inversion):\n"
           f"      RED:   {max_rgb_values[0]}\n"
           f"      GREEN: {max_rgb_values[1]}\n"
@@ -193,125 +176,6 @@ def emulsion_wb(image_data, region, colourspace_weights,
     gc = exponent
     bc = (mult / max_rgb_values[2]) * exponent
     print(f"ADJUSTMENT: Balance changes (pre-inversion):\n"
-          f"          RED:   {rc}\n"
-          f"          GREEN: {gc}\n"
-          f"          BLUE:  {bc}",
-          file=sys.stderr)
-    adjustment = {
-        "type": "mult",
-        "values": (rc, gc, bc)
-    }
-    return adjustment
-
-
-def density_wb(image_data, region, colourspace_weights,
-               custom_gray_points=None):
-    """
-    Multiply individual channels around a gray point average from a light
-    and dark gray patch.
-
-    Equalizes all values clustered around gray, neutralizing the primary colour
-    cast of a given negative.
-    """
-    normalization_factor = 1.0
-    rgb_values_1 = None
-    rgb_values_2 = None
-    if custom_gray_points:
-        print(f"CUSTOM: Custom gray points: {custom_gray_points}",
-              file=sys.stderr)
-        rgb_values_1 = average_sample_point(image_data,
-                                            custom_gray_points[0],
-                                            custom_gray_points[1],
-                                            16)
-        rgb_values_2 = average_sample_point(image_data,
-                                            custom_gray_points[2],
-                                            custom_gray_points[3],
-                                            16)
-    else:
-        # update analysis region from current working image
-        analysis_region = image_data[region[0][1]:region[1][1],
-                                     region[0][0]:region[1][0]]
-        # normalize luminance data
-        post_lum_values = np.dot(analysis_region,
-                                 colourspace_weights)
-        max_post_lum_y, max_post_lum_x = np.unravel_index(np.argmax(post_lum_values),
-                                                          post_lum_values.shape)
-        max_post_lum_rgb_values = analysis_region[max_post_lum_y,
-                                                  max_post_lum_x]
-        normalization_factor = np.max(max_post_lum_rgb_values)
-        post_lum_values = post_lum_values / normalization_factor
-        analysis_region = analysis_region / normalization_factor
-        low_gray = 0.9
-        high_gray = 0.36
-        # find the closest luminance point to 'middle gray'
-        proximity_to_low_gray = np.abs(post_lum_values - low_gray)
-        proximity_to_high_gray = np.abs(post_lum_values - high_gray)
-        low_mid_gray_y, low_mid_gray_x = np.unravel_index(np.argmin(proximity_to_low_gray),
-                                                          proximity_to_low_gray.shape)
-        high_mid_gray_y, high_mid_gray_x = np.unravel_index(np.argmin(proximity_to_high_gray),
-                                                          proximity_to_high_gray.shape)
-        rgb_values_1 = average_sample_point(analysis_region,
-                                            low_mid_gray_x,
-                                            low_mid_gray_y,
-                                            16)
-        rgb_values_2 = average_sample_point(analysis_region,
-                                            high_mid_gray_x,
-                                            high_mid_gray_y,
-                                            16)
-    low_gray_values = rgb_values_1
-    high_gray_values = rgb_values_2
-    if np.sum(low_gray_values) > np.sum(high_gray_values):
-        low_gray_values = rgb_values_2
-        high_gray_values = rgb_values_1
-    mid_gray_rgb_values = high_gray_values - low_gray_values
-    print(f"INFO: Middle gray RGB values (normalized):\n"
-          f"      RED:   {mid_gray_rgb_values[0]}\n"
-          f"      GREEN: {mid_gray_rgb_values[1]}\n"
-          f"      BLUE:  {mid_gray_rgb_values[2]}",
-          file=sys.stderr)
-    # always apply mults around green channel
-    mid_mult = mid_gray_rgb_values[1]
-    if mid_mult == 0.0:
-        mid_mult = 1.0
-    rc = mid_gray_rgb_values[0] / mid_mult
-    gc = mid_gray_rgb_values[1] / mid_mult
-    bc = mid_gray_rgb_values[2] / mid_mult
-    # print out change
-    print(f"ADJUSTMENT: Middle gray adjustment:\n"
-          f"          RED:   {rc}\n"
-          f"          GREEN: {gc}\n"
-          f"          BLUE:  {bc}",
-          file=sys.stderr)
-    adjustment = {
-        "type": "mult",
-        "values": (rc, gc, bc)
-    }
-    return adjustment
-
-
-def density_grayworld(image_data, region):
-    """
-    Average all colour values inside the region of the provided image. The
-    remaining RGB value should represent middle gray, and can be used to
-    correct colour casts.
-    """
-    analysis_region = image_data[region[0][1]:region[1][1],
-                                 region[0][0]:region[1][0]]
-    gray_mean = np.mean(analysis_region, axis=(0, 1))
-    print(f"INFO: Gray world RGB values:\n"
-          f"      RED:   {gray_mean[0]}\n"
-          f"      GREEN: {gray_mean[1]}\n"
-          f"      BLUE:  {gray_mean[2]}",
-          file=sys.stderr)
-    # always balance around green channel
-    mult = gray_mean[1]
-    if mult == 0.0:
-        mult = 1.0
-    rc = gray_mean[0] / mult
-    gc = gray_mean[1] / mult
-    bc = gray_mean[2] / mult
-    # print out change
-    print(f"ADJUSTMENT: Gray world adjustment:\n"
           f"          RED:   {rc}\n"
           f"          GREEN: {gc}\n"
           f"          BLUE:  {bc}",

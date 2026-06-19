@@ -2,17 +2,18 @@ import sys
 import math
 from types import SimpleNamespace
 import numpy as np
-import tifffile
 from scipy import ndimage
 import parse_cli_arguments
 from presets import save_preset, load_preset
 from PIL import ImageCms
+from colour_management import (convert_to_sRGB, ocio_load_and_create_config,
+                               ocio_convert_colorspace, ocio_bake_icc)
 from processing import (load_raw_image, save_image,
                         invert_to_density, density_to_luminance,
                         emulsion_wb, density_balance_gain,
                         apply_gain, apply_addition,
                         normalize_image, shift_blacks_to_zero,
-                        convert_to_sRGB, process_all_adjustments)
+                        process_all_adjustments)
 
 
 def process_negative(source_image, args):
@@ -40,7 +41,6 @@ def process_negative(source_image, args):
         - `green_balance`
         - `blue_balance`
         - `custom_max_point`
-        - `custom_gray_points`
         - `custom_wb_point`
 
     See `parse_cli_arguments.py` for more detailed information about each of
@@ -71,11 +71,6 @@ def process_negative(source_image, args):
         if args.custom_max_point:
             args.custom_max_point[0] = int(math.floor(args.custom_max_point[0] * args.resize))
             args.custom_max_point[1] = int(math.floor(args.custom_max_point[1] * args.resize))
-        if args.custom_gray_points:
-            args.custom_gray_points[0] = int(math.floor(args.custom_gray_points[0] * args.resize))
-            args.custom_gray_points[1] = int(math.floor(args.custom_gray_points[1] * args.resize))
-            args.custom_gray_points[2] = int(math.floor(args.custom_gray_points[2] * args.resize))
-            args.custom_gray_points[3] = int(math.floor(args.custom_gray_points[3] * args.resize))
         if args.custom_wb_point:
             args.custom_wb_point[0] = int(math.floor(args.custom_wb_point[0] * args.resize))
             args.custom_wb_point[1] = int(math.floor(args.custom_wb_point[1] * args.resize))
@@ -197,13 +192,19 @@ def main():
             adjustments.append({"type": "gain", "values": (args.exposure_comp,
                                                         args.exposure_comp,
                                                         args.exposure_comp)})
-        final_image = process_all_adjustments(source_image, adjustments)
+        final_image = process_all_adjustments(source_image, adjustments).astype(np.float32)
         # save image to disk
         # do we possess an icc profile to embed?
         icc_profile = None
         if args.icc:
             with open(args.icc, "rb") as icc_file:
                 icc_profile = icc_file.read()
+        elif args.ocio_config and args.ocio_in and args.ocio_out:
+            print("INFO: Using OCIO configuration.", file=sys.stderr)
+            ocio_config = ocio_load_and_create_config(args.ocio_config)
+            ocio_convert_colorspace(final_image,
+                                    ocio_config, args.ocio_in, args.ocio_out)
+            icc_profile = None
         else:
             print("WARN: Image was processed in linear Rec2020 colour space,\n"
                   "      but you have not provided an ICC profile to embed.\n"

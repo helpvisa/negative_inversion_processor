@@ -22,16 +22,26 @@ def parse_user_arguments():
     parser.add_argument('--generate-preset',
                         action='store_true',
                         help="Generate an inversion preset at the output path.")
-    # icc profile embedding
+    # icc profile embedding and ocio config loading
     parser.add_argument('--icc', '-p',
                         type=str, default=None,
                         help="ICC profile to embed in final TIFF export.")
+    parser.add_argument('--ocio-config',
+                        type=str, default=None,
+                        help="OCIO configuration file to load.")
+    parser.add_argument('--ocio-in',
+                        type=str, default=None,
+                        help="OCIO input setting to use. Should be some form of "
+                             "Linear Rec.2020.")
+    parser.add_argument('--ocio-out',
+                        type=str, default=None,
+                        help="OCIO output setting to use.")
     # image modifiers
     parser.add_argument('--blur',
                         type=int, default=None,
                         help="Optionally blur the working image to average pixel values.")
     parser.add_argument('--resize',
-                        type=float, default=0.5,
+                        type=float, default=1.0,
                         help="Resize the image for the processing pipeline.")
     parser.add_argument('--analysis-width', '-W',
                         type=int, default=4000,
@@ -68,12 +78,6 @@ def parse_user_arguments():
                         metavar=("X1", "Y1"),
                         type=int, default=None,
                         help="XY point of peak luminance, space-separated.")
-    parser.add_argument('--custom-gray-points',
-                        nargs=4,
-                        type=int, default=None,
-                        metavar=("X1", "Y1", "X2", "Y2"),
-                        help="XY points from two unique gray points, space separated "
-                             "(order is X Y X Y).")
     parser.add_argument('--custom-wb-point',
                         nargs=2,
                         metavar=("X1", "Y1"),

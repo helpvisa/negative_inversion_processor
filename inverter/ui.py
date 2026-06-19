@@ -10,7 +10,8 @@ import colour
 from scipy import ndimage
 import parse_cli_arguments
 from inverter import load_raw_image, process_negative
-from processing import convert_to_sRGB, process_all_adjustments
+from colour_management import convert_to_sRGB
+from processing import process_all_adjustments
 
 
 # derive from QWidget to create a custom updateable image class
