@@ -56,9 +56,6 @@ def process_negative(source_image, args):
         if args.wb_point:
             args.wb_point[0] = int(math.floor(args.wb_point[0] * args.resize))
             args.wb_point[1] = int(math.floor(args.wb_point[1] * args.resize))
-        if args.ref_points:
-            args.ref_point[0] = int(math.floor(args.ref_points[0] * args.resize))
-            args.ref_point[1] = int(math.floor(args.ref_points[1] * args.resize))
         resize_factor = (args.resize, args.resize, 1)
         working_image = ndimage.zoom(working_image,
                                      resize_factor,
@@ -104,15 +101,18 @@ def process_negative(source_image, args):
             scale_adjustment, shift_adjustment = density_balance(working_image,
                                                                  analysis_bounding_box,
                                                                  args.exponent,
-                                                                 args.ref_point,
+                                                                 args.wb_point,
                                                                  args.red_ratio,
                                                                  args.blue_ratio)
             working_image = apply_gain(working_image, scale_adjustment["values"])
             working_image = apply_addition(working_image, shift_adjustment["values"])
             adjustments.append(scale_adjustment.copy())
             adjustments.append(shift_adjustment.copy())
-            # shift any negative values back up into positive values
-            new_adjustment = shift_blacks(working_image, args.analysis_inset)
+            # readjust white balance
+            new_adjustment = white_balance(working_image, analysis_bounding_box,
+                                           rec2020_lum_weights, args.wb_point,
+                                           mode='add')
+            working_image = apply_addition(working_image, new_adjustment["values"])
             adjustments.append(new_adjustment.copy())
 
         if args.red_gain != 1.0 or args.green_gain != 1.0 or args.blue_gain != 1.0:

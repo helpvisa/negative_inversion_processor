@@ -79,13 +79,8 @@ def parse_user_arguments():
                         type=int, default=None,
                         help="XY point around which to white balance, space-separated"
                              "(this is usually the emulsion itself).")
-    parser.add_argument('--ref-point',
-                        nargs=2,
-                        metavar=("X1", "Y1"),
-                        type=int, default=None,
-                        help="XY points to use as neutral gray reference, space-separated.")
     parser.add_argument('--exponent',
-                        type=float, default=1,
+                        type=float, default=1.5,
                         help="Adjust global contrast (default 1.0).")
     parser.add_argument('--red-ratio',
                         type=float, default=1.36,

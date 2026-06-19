@@ -113,24 +113,18 @@ def invert_to_density(image_data):
     """
     # we calculate density from "transmittance" using log10(1/x)
     # see https://abpy.github.io/2023/08/20/color-neg.html
-    inverse_x_points = np.array([0.001, 0.25, 0.5, 0.75, 1.0])
-    inverse_y_points = np.log10(1.0 / inverse_x_points)
-    inverse_spline = scipy.interpolate.CubicSpline(inverse_x_points,
-                                                   inverse_y_points)
     # clip rgb values to avoid discolouration outside the negative itself,
     # which should theoretically still be within a 0 - 1 range at this point
-    return inverse_spline(np.clip(image_data, a_min=0.0, a_max=1.0))
+    return np.log10(1 / np.clip(image_data, a_min=1e-3, a_max=1.0))
 
 
-def density_to_luminance(image_data):
+def density_to_luminance(image_data, scale=0.01):
     """
     Map an image from "density space" into its final luminance values.
+
+    This often makes the film carrier look insane. Please ignore this.
     """
-    lum_x_points = np.array([0.0, 0.25, 0.5, 0.75, 1.0])
-    lum_y_points = np.power(10, lum_x_points) * 0.01
-    lum_spline = scipy.interpolate.CubicSpline(lum_x_points,
-                                               lum_y_points)
-    return lum_spline(image_data)
+    return np.power(10, image_data) * scale
 
 
 def find_brightest_luminance_spot(image_data, colourspace_weights):
@@ -227,7 +221,7 @@ def white_balance(image_data, region, colourspace_weights,
     return adjustment
 
 
-def density_balance(image_data, region, exponent=1.0, ref_point_in=None,
+def density_balance(image_data, region, exponent=1.5, ref_point_in=None,
                     red_ratio=1.36, blue_ratio=0.86):
     """
     Multiply the individual colour channels until equalized at a given point.
@@ -248,7 +242,8 @@ def density_balance(image_data, region, exponent=1.0, ref_point_in=None,
         ref_in = [r_med, g_med, b_med]
     # reference output point should be the white balance, else automatically
     # peg it to middle gray, -log10(0.18) = ~0.745 for density-space value
-    ref_out = np.array([0.745, 0.745, 0.745])
+    # ref_out = np.array([0.745, 0.745, 0.745])
+    ref_out = np.array([0.5, 0.5, 0.5])
     # use ratios to determine channel exponents
     rexp = red_ratio * exponent
     gexp = exponent
@@ -344,10 +339,7 @@ def process_all_adjustments(image_data, adjustments):
             working_data = apply_power(working_data,
                                        adjustment["values"])
         elif type == "norm":
-            print(f"PROCESS: normalize\n"
-                  f"         primaries: {tuple(float(x) for x in adjustment["values"])}\n"
-                  f"         {adjustment["inset"]}",
-                  file=sys.stderr)
+            print("PROCESS: normalize", file=sys.stderr)
             normalize_image(working_data, adjustment["values"],
                             adjustment["inset"])
         elif type == "shift_blacks":
