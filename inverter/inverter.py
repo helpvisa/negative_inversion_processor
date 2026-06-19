@@ -101,7 +101,7 @@ def process_negative(source_image, args):
             scale_adjustment, shift_adjustment = density_balance(working_image,
                                                                  analysis_bounding_box,
                                                                  args.exponent,
-                                                                 args.wb_point,
+                                                                 None,
                                                                  args.red_ratio,
                                                                  args.blue_ratio)
             working_image = apply_gain(working_image, scale_adjustment["values"])
@@ -136,7 +136,7 @@ def process_negative(source_image, args):
         adjustments.append(new_adjustment.copy())
 
     # normalize image back into 0-1 range to prevent clipping
-    if not args.skip_normalize:
+    if args.normalize:
         print("INFO: Normalizing final output.")
         new_adjustment = normalize_image(working_image, rec2020_lum_weights,
                                          args.analysis_inset)

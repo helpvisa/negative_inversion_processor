@@ -209,7 +209,7 @@ def white_balance(image_data, region, colourspace_weights,
         rc = factor / max_rgb_values[0]
         gc = 1.0
         bc = factor / max_rgb_values[2]
-    print(f"ADJUSTMENT: Balancing whites ({mode} mode)\n"
+    print(f"ADJUSTMENT: Balancing ({mode} mode)\n"
           f"            RED:   {rc}\n"
           f"            GREEN: {gc}\n"
           f"            BLUE:  {bc}",
@@ -242,8 +242,7 @@ def density_balance(image_data, region, exponent=1.5, ref_point_in=None,
         ref_in = [r_med, g_med, b_med]
     # reference output point should be the white balance, else automatically
     # peg it to middle gray, -log10(0.18) = ~0.745 for density-space value
-    # ref_out = np.array([0.745, 0.745, 0.745])
-    ref_out = np.array([0.5, 0.5, 0.5])
+    ref_out = np.array([0.745, 0.745, 0.745])
     # use ratios to determine channel exponents
     rexp = red_ratio * exponent
     gexp = exponent

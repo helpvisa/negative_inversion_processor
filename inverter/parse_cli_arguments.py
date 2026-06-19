@@ -88,7 +88,7 @@ def parse_user_arguments():
     parser.add_argument('--blue-ratio',
                         type=float, default=0.86,
                         help="Adjust blue ratio of film base.")
-    parser.add_argument('--skip-normalize',
+    parser.add_argument('--normalize',
                         action='store_true',
                         help="Normalize final output between 0 and 1 (default true).")
     return parser.parse_args()
