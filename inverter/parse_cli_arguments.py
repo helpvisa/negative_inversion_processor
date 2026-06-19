@@ -61,15 +61,15 @@ def parse_user_arguments():
     parser.add_argument('--debug-analysis-region',
                         action='store_true',
                         help="Show bounds of analysis region.")
-    parser.add_argument('--red-balance', '-R',
+    parser.add_argument('--red-gain', '-R',
                         type=float, default=1.0,
                         metavar="FLOAT",
                         help="Custom red balance (in density space).")
-    parser.add_argument('--green-balance', '-G',
+    parser.add_argument('--green-gain', '-G',
                         type=float, default=1.0,
                         metavar="FLOAT",
                         help="Custom green balance (in density space).")
-    parser.add_argument('--blue-balance', '-B',
+    parser.add_argument('--blue-gain', '-B',
                         type=float, default=1.0,
                         metavar="FLOAT",
                         help="Custom blue balance (in density space).")
@@ -79,14 +79,20 @@ def parse_user_arguments():
                         type=int, default=None,
                         help="XY point around which to white balance, space-separated"
                              "(this is usually the emulsion itself).")
-    parser.add_argument('--ref-points',
-                        nargs=4,
-                        metavar=("X1", "Y1", "X2", "Y2"),
+    parser.add_argument('--ref-point',
+                        nargs=2,
+                        metavar=("X1", "Y1"),
                         type=int, default=None,
                         help="XY points to use as neutral gray reference, space-separated.")
     parser.add_argument('--exponent',
-                        type=float, default=1.5,
+                        type=float, default=1,
                         help="Adjust global contrast (default 1.0).")
+    parser.add_argument('--red-ratio',
+                        type=float, default=1.36,
+                        help="Adjust red ratio of film base.")
+    parser.add_argument('--blue-ratio',
+                        type=float, default=0.86,
+                        help="Adjust blue ratio of film base.")
     parser.add_argument('--skip-normalize',
                         action='store_true',
                         help="Normalize final output between 0 and 1 (default true).")

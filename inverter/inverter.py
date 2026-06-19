@@ -10,7 +10,7 @@ from colour_management import (convert_to_sRGB, ocio_load_and_create_config,
                                ocio_convert_colorspace)
 from processing import (load_raw_image, save_image,
                         invert_to_density, density_to_luminance,
-                        white_balance, density_balance,
+                        shift_blacks, white_balance, density_balance,
                         apply_gain, apply_addition, normalize_image,
                         process_all_adjustments)
 
@@ -57,10 +57,8 @@ def process_negative(source_image, args):
             args.wb_point[0] = int(math.floor(args.wb_point[0] * args.resize))
             args.wb_point[1] = int(math.floor(args.wb_point[1] * args.resize))
         if args.ref_points:
-            args.ref_points[0] = int(math.floor(args.ref_points[0] * args.resize))
-            args.ref_points[1] = int(math.floor(args.ref_points[1] * args.resize))
-            args.ref_points[2] = int(math.floor(args.ref_points[2] * args.resize))
-            args.ref_points[3] = int(math.floor(args.ref_points[3] * args.resize))
+            args.ref_point[0] = int(math.floor(args.ref_points[0] * args.resize))
+            args.ref_point[1] = int(math.floor(args.ref_points[1] * args.resize))
         resize_factor = (args.resize, args.resize, 1)
         working_image = ndimage.zoom(working_image,
                                      resize_factor,
@@ -103,24 +101,22 @@ def process_negative(source_image, args):
 
         if not args.skip_auto_adjustments:
             # adjust the individual densities to eliminate colour casts
-            new_adjustment = density_balance(working_image,
-                                             analysis_bounding_box,
-                                             rec2020_lum_weights,
-                                             args.exponent,
-                                             args.ref_points)
-            working_image = apply_gain(working_image, new_adjustment["values"])
-            # working_image = apply_gain(working_image, ref_adjustment["values"])
-            adjustments.append(new_adjustment.copy())
-            # adjustments.append(ref_adjustment.copy())
-            # and perform another final white balance
-            new_adjustment = white_balance(working_image, analysis_bounding_box,
-                                           rec2020_lum_weights, args.wb_point,
-                                           mode='add')
-            working_image = apply_gain(working_image, new_adjustment["values"])
+            scale_adjustment, shift_adjustment = density_balance(working_image,
+                                                                 analysis_bounding_box,
+                                                                 args.exponent,
+                                                                 args.ref_point,
+                                                                 args.red_ratio,
+                                                                 args.blue_ratio)
+            working_image = apply_gain(working_image, scale_adjustment["values"])
+            working_image = apply_addition(working_image, shift_adjustment["values"])
+            adjustments.append(scale_adjustment.copy())
+            adjustments.append(shift_adjustment.copy())
+            # shift any negative values back up into positive values
+            new_adjustment = shift_blacks(working_image, args.analysis_inset)
             adjustments.append(new_adjustment.copy())
 
-        if args.red_balance != 1.0 or args.green_balance != 1.0 or args.blue_balance != 1.0:
-            # apply a final, user-adjustable gain to balance in density space
+        if args.red_gain != 1.0 or args.green_gain != 1.0 or args.blue_gain != 1.0:
+            # apply a user-adjustable gain to balance in density space
             new_adjustment = {
                 "type": "mult",
                 "values": (args.red_balance,
@@ -129,25 +125,23 @@ def process_negative(source_image, args):
             }
             working_image = apply_gain(working_image, new_adjustment["values"])
             adjustments.append(new_adjustment.copy())
-            print(f"ADJUSTED: User white balance:\n"
+            print(f"ADJUSTED: User gain:\n"
                   f"          RED:   {args.red_balance}\n"
                   f"          GREEN: {args.green_balance}\n"
                   f"          BLUE:  {args.blue_balance}",
                   file=sys.stderr)
-
         # map density to luminance
         new_adjustment = {"type": "density_to_luminance", "values": None}
         working_image = density_to_luminance(working_image)
         adjustments.append(new_adjustment.copy())
 
-    # final optional user tweaks
-    # normalize final image back into 0-1 range to prevent clipping
+    # normalize image back into 0-1 range to prevent clipping
     if not args.skip_normalize:
         print("INFO: Normalizing final output.")
         new_adjustment = normalize_image(working_image, rec2020_lum_weights,
                                          args.analysis_inset)
         adjustments.append(new_adjustment.copy())
-    # apply exposure compensation if needed
+    # apply exposure compensation
     if args.exposure_comp != 1.0:
         new_adjustment = {
             "type": "gain",

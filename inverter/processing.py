@@ -153,6 +153,34 @@ def find_darkest_luminance_spot(image_data, colourspace_weights):
     return average_sample_point(image_data, max_lum_x, max_lum_y, 16)
 
 
+# TODO: this one needs some work
+def shift_blacks(image_data, analysis_inset):
+    # inset the region to avoid out of bounds values (negative carrier)
+    height, width, channels = image_data.shape
+    n_area_width = int(width * analysis_inset)
+    n_area_height = int(height * analysis_inset)
+    start_x = (width - n_area_width) // 2
+    end_x = start_x + n_area_width
+    start_y = (height - n_area_height) // 2
+    end_y = start_y + n_area_height
+    region = [[start_x, start_y], [end_x, end_y]]
+    analysis_region = image_data[region[0][1]:region[1][1],
+                                 region[0][0]:region[1][0]]
+    analysis_region = image_data[region[0][1]:region[1][1],
+                                 region[0][0]:region[1][0]]
+    lowest_rgb_value = np.argmax(analysis_region)
+    if lowest_rgb_value < 0.0:
+        print("PROCESS: negative values found, black level shifted back above zero")
+        y, x, channel = np.unravel_index(lowest_rgb_value, analysis_region.shape)
+        min_val = analysis_region[y, x, channel]
+        image_data -= min_val
+    adjustment = {
+        "type": "shift_blacks",
+        "inset": analysis_inset
+    }
+    return adjustment
+
+
 def white_balance(image_data, region, colourspace_weights,
                   custom_wb_point=None, mode='mult'):
     """
@@ -199,57 +227,57 @@ def white_balance(image_data, region, colourspace_weights,
     return adjustment
 
 
-def density_balance(image_data, region, colourspace_weights,
-                    exponent=1.0, ref_points=None):
+def density_balance(image_data, region, exponent=1.0, ref_point_in=None,
+                    red_ratio=1.36, blue_ratio=0.86):
     """
     Multiply the individual colour channels until equalized at a given point.
     Neutralizes colour casts in highlights and shadows.
     """
     analysis_region = image_data[region[0][1]:region[1][1],
                                  region[0][0]:region[1][0]]
-    if ref_points:
-        clear = image_data[ref_points[1], ref_points[0]]
-        dense = image_data[ref_points[3], ref_points[2]]
-        print(f"CUSTOM: Custom reference points: {ref_points}",
+    ref_in = None
+    if ref_point_in:
+        print(f"CUSTOM: Custom reference point: {ref_point_in}",
               file=sys.stderr)
+        ref_in = image_data[ref_point_in[1], ref_point_in[0]]
     else:
-        # estimate two clear/dense values in the image
-        dense = find_brightest_luminance_spot(analysis_region,
-                                              colourspace_weights)
-        clear = find_darkest_luminance_spot(analysis_region,
-                                            colourspace_weights)
-    # determine density using green channel
-    if (dense[1] < clear[1]):
-        clear, dense = dense, clear
-    density_ratio = clear[1] / dense[1]
-    # these become our balancing exponents
-    rc = (clear[0] / dense[0]) / density_ratio * exponent
-    gc = exponent
-    bc = (clear[2] / dense[2]) / density_ratio * exponent
-    print(f"ADJUSTMENT: Density balance:\n"
-          f"            RED:   {rc}\n"
-          f"            GREEN: {gc}\n"
-          f"            BLUE:  {bc}",
+        # estimate a reference median point in the image
+        r_med = np.median(analysis_region[:, :, 0])
+        g_med = np.median(analysis_region[:, :, 1])
+        b_med = np.median(analysis_region[:, :, 2])
+        ref_in = [r_med, g_med, b_med]
+    # reference output point should be the white balance, else automatically
+    # peg it to middle gray, -log10(0.18) = ~0.745 for density-space value
+    ref_out = np.array([0.745, 0.745, 0.745])
+    # use ratios to determine channel exponents
+    rexp = red_ratio * exponent
+    gexp = exponent
+    bexp = blue_ratio * exponent
+    print(f"ADJUSTMENT: Density scale:\n"
+          f"            RED:   {rexp}\n"
+          f"            GREEN: {gexp}\n"
+          f"            BLUE:  {bexp}",
           file=sys.stderr)
-    density_adjustment = {
+    # determine per-channel offset factor
+    radd = ref_out[0] - (ref_in[0] * rexp)
+    gadd = ref_out[1] - (ref_in[1] * gexp)
+    badd = ref_out[2] - (ref_in[2] * bexp)
+    print(f"ADJUSTMENT: Density shift:\n"
+          f"            RED:   {radd}\n"
+          f"            GREEN: {gadd}\n"
+          f"            BLUE:  {badd}",
+          file=sys.stderr)
+    # but we must actually return two adjustments for a "scale-and-shift"
+    # scale must occur first
+    scale_adjustment = {
         "type": "mult",
-        "values": (rc, gc, bc)
+        "values": (rexp, gexp, bexp)
     }
-    # we also use the "dense" spot as a reference illumination
-    # apply some channel multipliers to ensure reference illum doesn't change
-    # rr = dense[0] - clear[0] * rc
-    # gr = dense[1] - clear[1] * gc
-    # br = dense[2] - clear[2] * bc
-    # print(f"ADJUSTMENT: Reference illumination adjustment:\n"
-    #       f"            RED:   {rr}\n"
-    #       f"            GREEN: {gr}\n"
-    #       f"            BLUE:  {br}",
-    #       file=sys.stderr)
-    # ref_adjustment = {
-    #     "type": "add",
-    #     "values": (rr, gr, br)
-    # }
-    return density_adjustment
+    shift_adjustment = {
+        "type": "add",
+        "values": (radd, gadd, badd)
+    }
+    return scale_adjustment, shift_adjustment
 
 
 def normalize_image(image_data, colourspace_weights, analysis_inset=0.5):
@@ -322,4 +350,6 @@ def process_all_adjustments(image_data, adjustments):
                   file=sys.stderr)
             normalize_image(working_data, adjustment["values"],
                             adjustment["inset"])
+        elif type == "shift_blacks":
+            shift_blacks(working_data, adjustment["inset"])
     return working_data
