@@ -1,7 +1,7 @@
 import sys
 import math
 import numpy as np
-from PySide6.QtCore import Qt, Slot
+from PySide6.QtCore import Qt, Slot, QThreadPool
 from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget,
                                QVBoxLayout, QHBoxLayout,
@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget,
 import colour
 from scipy import ndimage
 import parse_cli_arguments
+from ui_classes import Worker
 from inverter import load_raw_image, process_negative
 from colour_management import convert_to_sRGB
 from processing import process_all_adjustments
@@ -43,21 +44,30 @@ class ImageDisplayWidget(QWidget):
         # convert to QPixmap for display
         q_pixmap = QPixmap.fromImage(q_image)
         self.image_label.setPixmap(q_pixmap.scaled(self.image_label.size(),
-                                                Qt.KeepAspectRatio,
-                                                Qt.SmoothTransformation))
+                                                   Qt.KeepAspectRatio,
+                                                   Qt.SmoothTransformation))
 
 
 class CentralPane(QWidget):
     def __init__(self, parent=None):
         super(CentralPane, self).__init__(parent)
+        # internal tracking vars
+        self.source_image = []
+        self.preview_image = []
+
+        # load an initial set of user args just to populate the values
         self.args = parse_cli_arguments.parse_user_arguments()
-        # finagle the args in an ugly way to avoid preview breakage
-        # I should really convert a_width/height to a float that insets
-        # the analysis region automatically based on actual working_image size
-        self.args.analysis_width = int(math.floor(self.args.analysis_width * 0.25))
-        self.args.analysis_height = int(math.floor(self.args.analysis_height * 0.25))
-        self.args.resize = 1.0
         
+        # create a thread pool for triggering image processing
+        self.threadpool = QThreadPool()
+        thread_count = self.threadpool.maxThreadCount()
+        print(f"Multithreading active with {thread_count} threads.",
+              file=sys.stderr)
+        # hold threads to prevent garbage collection
+        # and initialize a thread_id iterator
+        self.active_threads = {}
+        self.thread_id = 0
+
         self.load_layout = QHBoxLayout()
         self.current_file_label = QLabel("NO FILE LOADED")
         self.load_button = QPushButton("Load Image")
@@ -75,21 +85,59 @@ class CentralPane(QWidget):
         self.load_button.clicked.connect(self.load_raw_file)
         self.preview_button.clicked.connect(self.preview_inverted_negative)
 
+    def remove_thread(self, thread_id):
+        self.active_threads[thread_id] = None
+
     def load_raw_file(self):
-        self.current_raw, discarded_text = QFileDialog.getOpenFileName()
-        self.source_image = load_raw_image(self.current_raw).astype(np.float32) / 65535.0
-        self.source_image = ndimage.zoom(self.source_image, (0.25, 0.25, 1), order=3)
-        self.current_file_label.setText(self.current_raw)
-        self.image_preview.image_array = self.source_image
-        self.image_preview.update_image()
+        # load raw image and resize it for the preview pane
+        image_path, discard_text = QFileDialog.getOpenFileName()
+        if image_path:
+            # disable button while we load the new image
+            self.current_raw = image_path
+            self.load_button.setEnabled(False)
+            self.current_file_label.setText("Loading your image...")
+            # the function to be executed within a separate thread
+            def init_func():
+                raw = load_raw_image(image_path).astype(np.float32) / 65535.0
+                raw = ndimage.zoom(raw, (0.25, 0.25, 1), order=3)
+                return raw
+            # the function to be executed upon thread completion
+            def post_func(image_data):
+                self.source_image = image_data
+                self.image_preview.image_array = self.source_image
+                self.image_preview.update_image()
+                self.load_button.setEnabled(True)
+            # instantiate and run a thread
+            # should split this out into its own function, surely
+            thread = self.instantiate_thread(init_func)
+            thread.signals.result.connect(post_func)
+            thread.signals.finished.connect(self.remove_thread)
+            self.active_threads[thread.thread_id] = thread
+            self.threadpool.start(thread)
 
     def preview_inverted_negative(self):
-        # this absolutely, unquestionably needs to be threaded
-        self.adjustments = process_negative(self.source_image,
-                                            self.args)
-        self.image_preview.image_array = process_all_adjustments(self.source_image,
-                                                                    self.adjustments)
-        self.image_preview.update_image()
+        if len(self.source_image) > 0:
+            self.preview_button.setEnabled(False)
+            def init_func():
+                adjustments = process_negative(self.source_image,
+                                               self.args)
+                return process_all_adjustments(self.source_image,
+                                               adjustments)
+            def post_func(image_data):
+                self.preview_image = image_data
+                self.image_preview.image_array = self.preview_image
+                self.image_preview.update_image()
+                self.preview_button.setEnabled(True)
+            thread = self.instantiate_thread(init_func)
+            thread.signals.result.connect(post_func)
+            thread.signals.finished.connect(self.remove_thread)
+            self.active_threads[thread.thread_id] = thread
+            self.threadpool.start(thread)
+
+    def instantiate_thread(self, func, *args, **kwargs):
+        self.thread_id += 1
+        thread = Worker(func, thread_id=self.thread_id)
+        return thread
 
 
 class MainWindow(QMainWindow):

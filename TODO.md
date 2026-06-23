@@ -10,6 +10,7 @@
         - same philosophy, accumulate auto-adjustment and user offset, apply
           once
 - [ ] create a graphical user interface which includes:
+    - **This whole thing is going to need a design document and some sketches**
     - [ ] folder batch loading / exporting
     - [ ] roll preview
         - stretch goal: include sliders on each individual preview in roll
