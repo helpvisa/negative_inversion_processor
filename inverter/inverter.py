@@ -30,12 +30,13 @@ def process_negative(source_image, args):
         - `blur`
         - `preset`
         - `generate_preset`
-        - `analysis_width`
-        - `analysis_height`
+        - `analysis_inset`
         - `exposure_comp`
         - `skip_inversion`
         - `skip_auto_adjustments`
         - `debug_analysis_region`
+        - `red_ratio`
+        - `blue_ratio`
         - `red_balance`
         - `green_balance`
         - `blue_balance`
@@ -178,6 +179,18 @@ def main():
         save_preset(args.output_path, adjustments)
     else:
         final_image = process_all_adjustments(source_image, adjustments).astype(np.float32)
+        # apply crop if necessary
+        if args.crop_inset < 1.0:
+            print("PROCESS: Applying crop.", file=sys.stderr)
+            final_height, final_width, image_channels = final_image.shape
+            crop_width = int(final_width * args.crop_inset)
+            crop_height = int(final_height * args.crop_inset)
+            crop_start_x = (final_width - crop_width) // 2
+            crop_end_x = crop_start_x + crop_width
+            crop_start_y = (final_height - crop_height) // 2
+            crop_end_y = crop_start_y + crop_height
+            final_image = final_image[crop_start_y:crop_end_y,
+                                      crop_start_x:crop_end_x]
         # save image to disk
         # do we possess an icc profile to embed?
         icc_profile = None
