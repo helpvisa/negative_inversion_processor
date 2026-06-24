@@ -1,13 +1,16 @@
 import sys
 import numpy as np
 from PySide6.QtCore import Qt, Slot, QThreadPool
-from PySide6.QtGui import QImage, QPixmap
+from PySide6.QtGui import QImage, QPixmap, QColor, QBrush
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget,
                                QVBoxLayout, QHBoxLayout,
-                               QLabel, QPushButton, QFileDialog)
+                               QLabel, QPushButton, QFileDialog,
+                               QGraphicsScene, QGraphicsView,
+                               QMessageBox)
+from PySide6.QtOpenGLWidgets import QOpenGLWidget
 from scipy import ndimage
 import parse_cli_arguments
-from ui_classes import Worker
+from ui_classes import Worker, ImageView
 from inverter import load_raw_image, process_negative
 from colour_management import convert_to_sRGB
 from processing import process_all_adjustments
@@ -19,12 +22,23 @@ class PrimaryImageView(QWidget):
         super(PrimaryImageView, self).__init__(parent)
         self.setMinimumSize(1200, 800)
 
-        # replace with QGraphicsView?
-        layout = QVBoxLayout(self)
-        self.image_label = QLabel()
-        self.image_label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(self.image_label)
-        self.setLayout(layout)
+        # configure QGraphicsScene and ImageView
+        self.layout = QHBoxLayout()
+        self.scene = QGraphicsScene(0, 0, 1200, 800)
+        self.view = ImageView(self.scene)
+        self.view.setViewport(QOpenGLWidget())
+        self.view.setBackgroundBrush(QBrush(QColor(128,128,128)))
+        self.view.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        self.view.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.view.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.view.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
+        self.view.setTransformationAnchor(self.view.ViewportAnchor.AnchorUnderMouse)
+        # configure preview image itself
+        self.preview_pixmap = self.scene.addPixmap(QPixmap(1200, 800))
+        self.preview_pixmap.setTransformationMode(Qt.TransformationMode.SmoothTransformation)
+        self.preview_pixmap.setPos(0,0)
+        self.layout.addWidget(self.view)
+        self.setLayout(self.layout)
 
     @Slot()
     def update_image(self):
@@ -40,10 +54,11 @@ class PrimaryImageView(QWidget):
                          3 * display_image.shape[1],
                          QImage.Format.Format_RGB888)
         # convert to QPixmap for display
-        q_pixmap = QPixmap.fromImage(q_image)
-        self.image_label.setPixmap(q_pixmap.scaled(self.image_label.size(),
-                                                   Qt.KeepAspectRatio,
-                                                   Qt.SmoothTransformation))
+        new_pixmap = QPixmap.fromImage(q_image)
+        self.preview_pixmap.setPixmap(new_pixmap)
+        # resize view to match image
+        self.scene.setSceneRect(0, 0, q_image.width(), q_image.height())
+        self.view.centerOn(self.preview_pixmap)
 
 
 class EditingDisplay(QWidget):
@@ -121,14 +136,24 @@ class EditingDisplay(QWidget):
                 self.source_image = image_data
                 self.image_preview.image_array = self.source_image
                 self.image_preview.update_image()
+                self.current_file_label.setText(self.current_raw)
                 self.load_button.setEnabled(True)
                 self.preview_button.setEnabled(True)
+            def error_func(e):
+                exctype, value, error = e
+                # tell user there's an issue
+                QMessageBox.critical(self, "Error processing image!", error)
+                # and re-enable the buttons
+                self.current_file_label.setText("NO FILE LOADED")
+                self.preview_button.setEnabled(True)
+                self.load_button.setEnabled(True)
             # instantiate and run a thread
             # should split this out into its own function, surely
             thread = self.instantiate_thread(init_func)
-            thread.signals.result.connect(post_func)
-            thread.signals.finished.connect(self.remove_thread)
             self.active_threads[thread.thread_id] = thread
+            thread.signals.result.connect(post_func)
+            thread.signals.error.connect(error_func)
+            thread.signals.finished.connect(self.remove_thread)
             self.threadpool.start(thread)
 
     def preview_inverted_negative(self):
@@ -146,10 +171,16 @@ class EditingDisplay(QWidget):
                 self.image_preview.update_image()
                 self.preview_button.setEnabled(True)
                 self.load_button.setEnabled(True)
+            def error_func(e):
+                exctype, value, error = e
+                QMessageBox.critical(self, "Error processing image!", error)
+                self.preview_button.setEnabled(True)
+                self.load_button.setEnabled(True)
             thread = self.instantiate_thread(init_func)
-            thread.signals.result.connect(post_func)
-            thread.signals.finished.connect(self.remove_thread)
             self.active_threads[thread.thread_id] = thread
+            thread.signals.result.connect(post_func)
+            thread.signals.error.connect(error_func)
+            thread.signals.finished.connect(self.remove_thread)
             self.threadpool.start(thread)
 
     def instantiate_thread(self, func, *args, **kwargs):
@@ -162,7 +193,6 @@ class MainWindow(QMainWindow):
     def __init__(self, parent=None):
         super(MainWindow, self).__init__(parent)
         self.setWindowTitle("Film Negative Inverter")
-        self.resize(800, 600)
         self.editing_display = EditingDisplay()
         self.setCentralWidget(self.editing_display)
 

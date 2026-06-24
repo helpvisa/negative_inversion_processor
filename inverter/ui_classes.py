@@ -1,7 +1,8 @@
 import sys
 import traceback
-from PySide6.QtCore import (QRunnable,
-                            Slot, QObject, Signal)
+from PySide6.QtCore import (QRunnable, Slot, QObject, Signal,
+                            Qt, QPoint)
+from PySide6.QtWidgets import QGraphicsView
 
 
 # custom worker class for handling multithreading
@@ -41,8 +42,8 @@ class Worker(QRunnable):
         try:
             result = self.function(*self.args, **self.kwargs)
         except Exception:
-            traceback.print_exc()
             exctype, value = sys.exc_info()[:2]
+            traceback.print_exc()
             self.signals.error.emit((exctype, value, traceback.format_exc()))
         else:
             self.signals.result.emit(result)
@@ -50,6 +51,20 @@ class Worker(QRunnable):
             self.signals.finished.emit(self.thread_id)
             print(f"Thread ended: {self.thread_id}", file=sys.stderr)
 
+
+# custom QGraphicsView class to implement new controls
+class ImageView(QGraphicsView):
+    def __init__(self, parent=None):
+        super(ImageView, self).__init__(parent)
+        self.last_mouse_pos = (0, 0)
+
+    def wheelEvent(self, event):
+        # zoom QGraphicsView in and out
+        angle = event.angleDelta().y()
+        scale_factor = 1.1
+        if (angle < 0):
+            scale_factor = 1.0 / scale_factor
+        self.scale(scale_factor, scale_factor)
 
 # custom class for handling the image processing pipeline
 # should tackle image processing in steps, saving intermediate images for each step
