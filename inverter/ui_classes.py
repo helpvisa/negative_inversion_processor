@@ -1,6 +1,6 @@
 import sys
 import traceback
-from PySide6.QtCore import (QRunnable, QThreadPool,
+from PySide6.QtCore import (QRunnable,
                             Slot, QObject, Signal)
 
 
@@ -49,3 +49,8 @@ class Worker(QRunnable):
         finally:
             self.signals.finished.emit(self.thread_id)
             print(f"Thread ended: {self.thread_id}", file=sys.stderr)
+
+
+# custom class for handling the image processing pipeline
+# should tackle image processing in steps, saving intermediate images for each step
+# source_image > pre-inversion wb > wb_image > shift+scale > wb_image > user wb > output

@@ -1,12 +1,10 @@
 import sys
-import math
 import numpy as np
 from PySide6.QtCore import Qt, Slot, QThreadPool
 from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget,
                                QVBoxLayout, QHBoxLayout,
                                QLabel, QPushButton, QFileDialog)
-import colour
 from scipy import ndimage
 import parse_cli_arguments
 from ui_classes import Worker
@@ -16,9 +14,9 @@ from processing import process_all_adjustments
 
 
 # derive from QWidget to create a custom updateable image class
-class ImageDisplayWidget(QWidget):
+class PrimaryImageView(QWidget):
     def __init__(self, parent=None):
-        super(ImageDisplayWidget, self).__init__(parent)
+        super(PrimaryImageView, self).__init__(parent)
         self.setMinimumSize(1200, 800)
 
         # replace with QGraphicsView?
@@ -48,10 +46,11 @@ class ImageDisplayWidget(QWidget):
                                                    Qt.SmoothTransformation))
 
 
-class CentralPane(QWidget):
+class EditingDisplay(QWidget):
     def __init__(self, parent=None):
-        super(CentralPane, self).__init__(parent)
+        super(EditingDisplay, self).__init__(parent)
         # internal tracking vars
+        self.current_raw = None
         self.source_image = []
         self.preview_image = []
 
@@ -68,20 +67,35 @@ class CentralPane(QWidget):
         self.active_threads = {}
         self.thread_id = 0
 
-        self.load_layout = QHBoxLayout()
+        # controls
         self.current_file_label = QLabel("NO FILE LOADED")
         self.load_button = QPushButton("Load Image")
+        self.rotate_left_button = QPushButton("Rotate Left")
+        self.rotate_right_button = QPushButton("Rotate Right")
+        self.preview_button = QPushButton("Preview Image")
+
+        # image preview / canvas
+        self.image_preview = PrimaryImageView(self)
+
+        # define layouts
+        # top-level layout
+        self.layout = QVBoxLayout()
+        # file loading
+        self.load_layout = QHBoxLayout()
         self.load_layout.addWidget(self.current_file_label)
         self.load_layout.addWidget(self.load_button)
-
-        self.layout = QVBoxLayout()
-        self.image_preview = ImageDisplayWidget(self)
-        self.preview_button = QPushButton("Preview Image")
+        # editing toolbar
+        self.editing_layout = QHBoxLayout()
+        self.editing_layout.addWidget(self.rotate_left_button)
+        self.editing_layout.addWidget(self.rotate_right_button)
+        self.editing_layout.addWidget(self.preview_button)
+        # add all layouts and wrap it all up
         self.layout.addLayout(self.load_layout)
         self.layout.addWidget(self.image_preview)
-        self.layout.addWidget(self.preview_button)
+        self.layout.addLayout(self.editing_layout)
         self.setLayout(self.layout)
 
+        # wiring up functions
         self.load_button.clicked.connect(self.load_raw_file)
         self.preview_button.clicked.connect(self.preview_inverted_negative)
 
@@ -95,6 +109,7 @@ class CentralPane(QWidget):
             # disable button while we load the new image
             self.current_raw = image_path
             self.load_button.setEnabled(False)
+            self.preview_button.setEnabled(False)
             self.current_file_label.setText("Loading your image...")
             # the function to be executed within a separate thread
             def init_func():
@@ -107,6 +122,7 @@ class CentralPane(QWidget):
                 self.image_preview.image_array = self.source_image
                 self.image_preview.update_image()
                 self.load_button.setEnabled(True)
+                self.preview_button.setEnabled(True)
             # instantiate and run a thread
             # should split this out into its own function, surely
             thread = self.instantiate_thread(init_func)
@@ -117,6 +133,7 @@ class CentralPane(QWidget):
 
     def preview_inverted_negative(self):
         if len(self.source_image) > 0:
+            self.load_button.setEnabled(False)
             self.preview_button.setEnabled(False)
             def init_func():
                 adjustments = process_negative(self.source_image,
@@ -128,6 +145,7 @@ class CentralPane(QWidget):
                 self.image_preview.image_array = self.preview_image
                 self.image_preview.update_image()
                 self.preview_button.setEnabled(True)
+                self.load_button.setEnabled(True)
             thread = self.instantiate_thread(init_func)
             thread.signals.result.connect(post_func)
             thread.signals.finished.connect(self.remove_thread)
@@ -145,8 +163,8 @@ class MainWindow(QMainWindow):
         super(MainWindow, self).__init__(parent)
         self.setWindowTitle("Film Negative Inverter")
         self.resize(800, 600)
-        self.central_pane = CentralPane()
-        self.setCentralWidget(self.central_pane)
+        self.editing_display = EditingDisplay()
+        self.setCentralWidget(self.editing_display)
 
 
 if __name__ == "__main__":
