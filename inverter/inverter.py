@@ -37,9 +37,9 @@ def process_negative(source_image, args):
         - `debug_analysis_region`
         - `red_ratio`
         - `blue_ratio`
-        - `red_balance`
-        - `green_balance`
-        - `blue_balance`
+        - `red_gain`
+        - `green_gain`
+        - `blue_gain`
         - `wb_point`
 
     See `parse_cli_arguments.py` for more detailed information about each of
@@ -120,16 +120,16 @@ def process_negative(source_image, args):
             # apply a user-adjustable gain to balance in density space
             new_adjustment = {
                 "type": "mult",
-                "values": (args.red_balance,
-                           args.green_balance,
-                           args.blue_balance)
+                "values": (args.red_gain,
+                           args.green_gain,
+                           args.blue_gain)
             }
             working_image = apply_gain(working_image, new_adjustment["values"])
             adjustments.append(new_adjustment.copy())
-            print(f"ADJUSTED: User gain:\n"
-                  f"          RED:   {args.red_balance}\n"
-                  f"          GREEN: {args.green_balance}\n"
-                  f"          BLUE:  {args.blue_balance}",
+            print(f"ADJUSTMENT: User gain:\n"
+                  f"          RED:   {args.red_gain}\n"
+                  f"          GREEN: {args.green_gain}\n"
+                  f"          BLUE:  {args.blue_gain}",
                   file=sys.stderr)
         # map density to luminance
         new_adjustment = {"type": "density_to_luminance", "values": None}
