@@ -26,17 +26,10 @@ class PrimaryImageView(QWidget):
         self.layout = QHBoxLayout()
         self.scene = QGraphicsScene(0, 0, 1200, 800)
         self.view = ImageView(self.scene)
-        self.view.setViewport(QOpenGLWidget())
-        self.view.setBackgroundBrush(QBrush(QColor(128,128,128)))
-        self.view.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
-        self.view.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.view.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.view.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
-        self.view.setTransformationAnchor(self.view.ViewportAnchor.AnchorUnderMouse)
         # configure preview image itself
         self.preview_pixmap = self.scene.addPixmap(QPixmap(1200, 800))
         self.preview_pixmap.setTransformationMode(Qt.TransformationMode.SmoothTransformation)
-        self.preview_pixmap.setPos(0,0)
+        self.preview_pixmap.setPos(0, 0)
         self.layout.addWidget(self.view)
         self.setLayout(self.layout)
 
@@ -57,7 +50,7 @@ class PrimaryImageView(QWidget):
         new_pixmap = QPixmap.fromImage(q_image)
         self.preview_pixmap.setPixmap(new_pixmap)
         # resize view to match image
-        self.scene.setSceneRect(0, 0, q_image.width(), q_image.height())
+        self.scene.setSceneRect(self.preview_pixmap.boundingRect())
         self.view.centerOn(self.preview_pixmap)
 
 

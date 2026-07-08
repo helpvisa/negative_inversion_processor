@@ -3,6 +3,8 @@ import traceback
 from PySide6.QtCore import (QRunnable, Slot, QObject, Signal,
                             Qt, QPoint)
 from PySide6.QtWidgets import QGraphicsView
+from PySide6.QtOpenGLWidgets import QOpenGLWidget
+from PySide6.QtGui import QColor, QBrush
 
 
 # custom worker class for handling multithreading
@@ -54,9 +56,48 @@ class Worker(QRunnable):
 
 # custom QGraphicsView class to implement new controls
 class ImageView(QGraphicsView):
+    """
+    Custom QGraphicsView that incorporates color picker and zooming.
+
+    When "pick_mode" is enabled, the pointPicked signal is emitted if the user
+    left-clicks anywhere within the view. Pressing any other button exits
+    "pick_mode".
+    """
+    pointPicked = Signal(float, float)
+
     def __init__(self, parent=None):
         super(ImageView, self).__init__(parent)
         self.last_mouse_pos = (0, 0)
+        # configure view properties
+        self.setViewport(QOpenGLWidget())
+        self.setBackgroundBrush(QBrush(QColor(128,128,128)))
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
+        self.setTransformationAnchor(self.ViewportAnchor.AnchorUnderMouse)
+
+    def set_pick_mode(self, enabled: bool):
+        self._pick_mode = enabled
+        if enabled:
+            self.setCursor(Qt.CursorShape.CrossCursor)
+            self.setDragMode(QGraphicsView.DragMode.NoDrag)
+        else:
+            self.setCursor(Qt.CursorShape.ArrowCursor)
+            self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
+
+    def mousePressEvent(self, event):
+        # intercept clicks if we're in pick mode
+        if self._pick_mode:
+            if event.button() == Qt.MouseButton.LeftButton:
+                scene_pos = self.mapToScene(event.pos())
+                self.set_pick_mode(False)
+                self.pointPicked.emit(scene_pos.x(), scene_pos.y())
+            else:
+                self.set_pick_mode(False)
+        event.accept()
+        return
+        super().mousePressEvent(event)
 
     def wheelEvent(self, event):
         # zoom QGraphicsView in and out

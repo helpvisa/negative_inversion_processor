@@ -1,8 +1,6 @@
 import sys
-import math
 import rawpy
 import tifffile
-import scipy
 import numpy as np
 
 
@@ -240,8 +238,8 @@ def density_balance(image_data, region, exponent=1.5, ref_point_in=None,
         g_med = np.median(analysis_region[:, :, 1])
         b_med = np.median(analysis_region[:, :, 2])
         ref_in = [r_med, g_med, b_med]
-    # reference output point should be the white balance, else automatically
-    # peg it to middle gray, -log10(0.18) = ~0.745 for density-space value
+    # peg our output value to middle gray
+    # -log10(0.18) = ~0.745 for density-space value
     ref_out = np.array([0.745, 0.745, 0.745])
     # use ratios to determine channel exponents
     rexp = red_ratio * exponent
