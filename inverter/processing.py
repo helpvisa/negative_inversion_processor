@@ -35,7 +35,6 @@ def save_image(image_data, output_path, tiff_format, icc_profile):
         image_to_save = image_data.astype(np.float16)
     tifffile.imwrite(output_path,
                      image_to_save,
-                     photometric="rgb",
                      compression="zlib",
                      compressionargs={"level":9},
                      predictor=p_val,
@@ -123,6 +122,14 @@ def density_to_luminance(image_data, scale=0.01):
     This often makes the film carrier look insane. Please ignore this.
     """
     return np.power(10, image_data) * scale
+
+
+def convert_to_grayscale(image_data, colourspace_weights):
+    return np.dot(image_data, colourspace_weights)
+
+
+def convert_to_grayscale_from_g(image_data):
+    return image_data[:, :, 1]
 
 
 def find_brightest_luminance_spot(image_data, colourspace_weights):

@@ -95,4 +95,7 @@ def parse_user_arguments():
     parser.add_argument('--normalize',
                         action='store_true',
                         help="Normalize final output between 0 and 1 (default true).")
+    parser.add_argument('--bw',
+                        action='store_true',
+                        help="Save final image in black and white.")
     return parser.parse_args()

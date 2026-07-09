@@ -12,7 +12,7 @@ from processing import (load_raw_image, save_image,
                         invert_to_density, density_to_luminance,
                         shift_blacks, white_balance, density_balance,
                         apply_gain, apply_addition, normalize_image,
-                        process_all_adjustments)
+                        convert_to_grayscale_from_g, process_all_adjustments)
 
 
 def process_negative(source_image, args):
@@ -179,6 +179,10 @@ def main():
         save_preset(args.output_path, adjustments)
     else:
         final_image = process_all_adjustments(source_image, adjustments).astype(np.float32)
+        # convert to b&w
+        if args.bw:
+            print("PROCESS: Convert to black and white.", file=sys.stderr)
+            final_image = convert_to_grayscale_from_g(final_image)
         # apply crop if necessary
         if args.crop_inset < 1.0:
             print("PROCESS: Applying crop.", file=sys.stderr)
