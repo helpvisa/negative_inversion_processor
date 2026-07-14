@@ -1,16 +1,15 @@
 import sys
 import numpy as np
 from PySide6.QtCore import Qt, Slot, QThreadPool
-from PySide6.QtGui import QImage, QPixmap, QColor, QBrush
+from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget,
                                QVBoxLayout, QHBoxLayout,
                                QLabel, QPushButton, QFileDialog,
-                               QGraphicsScene, QGraphicsView,
-                               QMessageBox)
-from PySide6.QtOpenGLWidgets import QOpenGLWidget
+                               QGraphicsScene, QMessageBox, QSplitter)
 from scipy import ndimage
 import parse_cli_arguments
-from ui_classes import Worker, ImageView
+from ui_classes import Worker
+from custom_widgets import ImageView, LabeledSlider
 from inverter import load_raw_image, process_negative
 from colour_management import convert_to_sRGB
 from processing import process_all_adjustments
@@ -20,7 +19,7 @@ from processing import process_all_adjustments
 class PrimaryImageView(QWidget):
     def __init__(self, parent=None):
         super(PrimaryImageView, self).__init__(parent)
-        self.setMinimumSize(1200, 800)
+        self.setMinimumSize(600, 400)
 
         # configure QGraphicsScene and ImageView
         self.layout = QHBoxLayout()
@@ -54,9 +53,34 @@ class PrimaryImageView(QWidget):
         self.view.centerOn(self.preview_pixmap)
 
 
+class ToolPanel(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        #--- top-level tools layout
+        self.layout = QVBoxLayout()
+        self.layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        #--- inversion tools layout
+        self.inversion_tools_header = QLabel("<b>Inversion</b>")
+        self.inversion_layout = QVBoxLayout()
+        self.red_ratio_slider = LabeledSlider("Red Ratio",
+                                              0.0, 3.0, 1.36, 300)
+        self.blue_ratio_slider = LabeledSlider("Blue Ratio",
+                                               0.0, 3.0, 0.86, 300)
+        self.green_exponent_slider = LabeledSlider("Green Exponent",
+                                                   0.0, 5.0, 1.5, 500)
+        self.inversion_layout.addWidget(self.red_ratio_slider)
+        self.inversion_layout.addWidget(self.blue_ratio_slider)
+        self.inversion_layout.addWidget(self.green_exponent_slider)
+        #--- add all layouts
+        self.layout.addWidget(self.inversion_tools_header)
+        self.layout.addLayout(self.inversion_layout)
+        self.setLayout(self.layout)
+
+
 class EditingDisplay(QWidget):
     def __init__(self, parent=None):
-        super(EditingDisplay, self).__init__(parent)
+        super().__init__(parent)
         # internal tracking vars
         self.current_raw = None
         self.source_image = []
@@ -75,32 +99,33 @@ class EditingDisplay(QWidget):
         self.active_threads = {}
         self.thread_id = 0
 
+        # image preview / canvas
+        self.image_preview = PrimaryImageView(self)
         # controls
+        # demo controls
         self.current_file_label = QLabel("NO FILE LOADED")
         self.load_button = QPushButton("Load Image")
         self.rotate_left_button = QPushButton("Rotate Left")
         self.rotate_right_button = QPushButton("Rotate Right")
         self.preview_button = QPushButton("Preview Image")
-
-        # image preview / canvas
-        self.image_preview = PrimaryImageView(self)
+        # actual side panel
+        self.tool_panel = ToolPanel()
 
         # define layouts
         # top-level layout
         self.layout = QVBoxLayout()
-        # file loading
+        # file layout
         self.load_layout = QHBoxLayout()
         self.load_layout.addWidget(self.current_file_label)
         self.load_layout.addWidget(self.load_button)
-        # editing toolbar
-        self.editing_layout = QHBoxLayout()
-        self.editing_layout.addWidget(self.rotate_left_button)
-        self.editing_layout.addWidget(self.rotate_right_button)
-        self.editing_layout.addWidget(self.preview_button)
+        # editing layout
+        self.editing_layout = QSplitter(Qt.Horizontal)
+        self.editing_layout.setHandleWidth(16)
+        self.editing_layout.addWidget(self.image_preview)
+        self.editing_layout.addWidget(self.tool_panel)
         # add all layouts and wrap it all up
         self.layout.addLayout(self.load_layout)
-        self.layout.addWidget(self.image_preview)
-        self.layout.addLayout(self.editing_layout)
+        self.layout.addWidget(self.editing_layout)
         self.setLayout(self.layout)
 
         # wiring up functions
@@ -188,6 +213,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Film Negative Inverter")
         self.editing_display = EditingDisplay()
         self.setCentralWidget(self.editing_display)
+        self.resize(1200, 800)
 
 
 if __name__ == "__main__":
