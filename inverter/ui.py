@@ -210,7 +210,7 @@ class EditingDisplay(QWidget):
 class MainWindow(QMainWindow):
     def __init__(self, parent=None):
         super(MainWindow, self).__init__(parent)
-        self.setWindowTitle("Film Negative Inverter")
+        self.setWindowTitle("Negative Inversion Processor")
         self.editing_display = EditingDisplay()
         self.setCentralWidget(self.editing_display)
         self.resize(1200, 800)
