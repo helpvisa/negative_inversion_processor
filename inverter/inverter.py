@@ -186,7 +186,8 @@ def main():
         # apply crop if necessary
         if args.crop_inset < 1.0:
             print("PROCESS: Applying crop.", file=sys.stderr)
-            final_height, final_width, image_channels = final_image.shape
+            # *rest required as number of channels not returned when b&w
+            final_height, final_width, *rest = final_image.shape
             crop_width = int(final_width * args.crop_inset)
             crop_height = int(final_height * args.crop_inset)
             crop_start_x = (final_width - crop_width) // 2

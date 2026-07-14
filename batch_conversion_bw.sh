@@ -12,8 +12,9 @@ fi
 
 for item in "$1"/*."$2"; do
     python3 "$WORK_DIR/inverter/inverter.py" \
-        -p "$WORK_DIR/profile.icc" \
+        -p "$WORK_DIR/bw-profile.icc" \
         --preset "$3" \
+        --bw \
         --crop-inset 0.89 \
         "$item" \
         "$4/$(basename $item .$2).tiff"
