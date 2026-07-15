@@ -10,7 +10,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget,
 from scipy import ndimage
 import parse_cli_arguments
 from ui_classes import Worker
-from custom_widgets import ImageView, LabeledSlider
+from custom_widgets import ImageView, LabeledSlider, ColorPicker
 from inverter import load_raw_image, process_negative
 from colour_management import convert_to_sRGB
 from processing import process_all_adjustments
@@ -61,22 +61,33 @@ class ToolPanel(QWidget):
         #--- top-level tools layout
         self.layout = QVBoxLayout()
         self.layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        #--- initial white balance
+        self.pre_inv_wb_picker = ColorPicker("Dmin - Base Color")
         #--- inversion tools layout
         self.inversion_tools_header = QLabel("<b>Inversion</b>")
         self.inversion_layout = QVBoxLayout()
         self.skip_inversion_checkbox = QCheckBox("Skip Inversion")
         self.skip_inversion_checkbox.setCheckState(Qt.CheckState.Unchecked)
         self.red_ratio_slider = LabeledSlider("Red Ratio",
-                                              0.0, 3.0, 1.36, 300)
+                                              0.0, 3.0, 1.36, 300,
+                                              "#ffcccc")
         self.blue_ratio_slider = LabeledSlider("Blue Ratio",
-                                               0.0, 3.0, 0.86, 300)
-        self.green_exponent_slider = LabeledSlider("Green Exponent",
-                                                   0.0, 5.0, 1.5, 500)
+                                               0.0, 3.0, 0.86, 300,
+                                               "#ccccff")
+        self.contrast_slider = LabeledSlider("Contrast",
+                                             0.0, 5.0, 1.5, 500)
+        self.lo_neutral_picker = ColorPicker("Low Density")
+        self.hi_neutral_picker = ColorPicker("High Density")
         self.inversion_layout.addWidget(self.skip_inversion_checkbox)
         self.inversion_layout.addWidget(self.red_ratio_slider)
         self.inversion_layout.addWidget(self.blue_ratio_slider)
-        self.inversion_layout.addWidget(self.green_exponent_slider)
+        self.inversion_layout.addWidget(self.contrast_slider)
+        density_picker_layout = QHBoxLayout()
+        density_picker_layout.addWidget(self.lo_neutral_picker)
+        density_picker_layout.addWidget(self.hi_neutral_picker)
+        self.inversion_layout.addLayout(density_picker_layout)
         #--- add all layouts
+        self.layout.addWidget(self.pre_inv_wb_picker)
         self.layout.addWidget(self.inversion_tools_header)
         self.layout.addLayout(self.inversion_layout)
         self.setLayout(self.layout)
@@ -135,6 +146,14 @@ class EditingDisplay(QWidget):
         # wiring up functions
         self.load_button.clicked.connect(self.load_raw_file)
         self.preview_button.clicked.connect(self.preview_inverted_negative)
+        # allow pickers to trigger picker mode
+        self.tool_panel.pre_inv_wb_picker.pickRequested.connect(self.image_preview.view.enable_pick_mode)
+        self.tool_panel.lo_neutral_picker.pickRequested.connect(self.image_preview.view.enable_pick_mode)
+        self.tool_panel.hi_neutral_picker.pickRequested.connect(self.image_preview.view.enable_pick_mode)
+        # allow view to send values back
+        self.image_preview.view.pointPicked.connect(self.tool_panel.pre_inv_wb_picker.finish_pick)
+        self.image_preview.view.pointPicked.connect(self.tool_panel.lo_neutral_picker.finish_pick)
+        self.image_preview.view.pointPicked.connect(self.tool_panel.hi_neutral_picker.finish_pick)
 
     def remove_thread(self, thread_id):
         self.active_threads[thread_id] = None
@@ -222,12 +241,12 @@ class MainWindow(QMainWindow):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    palette = QPalette(QColor(0,   0,   0  ),  # windowText
+    palette = QPalette(QColor(4,   4,   4  ),  # windowText
                        QColor(128, 128, 128),  # window
-                       QColor(255, 255, 255),  # light
-                       QColor(0,   0,   0  ),  # dark
+                       QColor(222, 222, 222),  # light
+                       QColor(8,   8,   8  ),  # dark
                        QColor(128, 128, 128),  # mid
-                       QColor(0,   0,   0  ),  # text
+                       QColor(4,   4,   4  ),  # text
                        QColor(192, 192, 192))  # base
     app.setPalette(palette)
     window = MainWindow()

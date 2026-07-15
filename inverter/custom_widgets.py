@@ -1,8 +1,9 @@
-from PySide6.QtCore import Qt, Signal, QPoint, QTimer
+from PySide6.QtCore import Qt, Slot, Signal, QPoint, QTimer
 from PySide6.QtGui import QColor, QBrush, QPainter, QCursor
 from PySide6.QtWidgets import (QApplication, QWidget, QGraphicsView,
                                QHBoxLayout, QVBoxLayout,
-                               QLabel, QInputDialog, QPushButton)
+                               QLabel, QInputDialog, QPushButton,
+                               QSpacerItem, QSizePolicy, QFrame)
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
 
 
@@ -28,9 +29,17 @@ class ImageView(QGraphicsView):
         self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
         self.setTransformationAnchor(self.ViewportAnchor.AnchorUnderMouse)
 
+    @Slot()
+    def enable_pick_mode(self):
+        self.set_pick_mode(True)
+
+    @Slot()
+    def disable_pick_mode(self):
+        self.set_pick_mode(False)
+    
     def set_pick_mode(self, enabled: bool):
         self._pick_mode = enabled
-        if enabled:
+        if self._pick_mode:
             self.setCursor(Qt.CursorShape.CrossCursor)
             self.setDragMode(QGraphicsView.DragMode.NoDrag)
         else:
@@ -66,7 +75,8 @@ class Scrubber(QWidget):
     valueChanged = Signal(int)
     rightClicked = Signal()
 
-    def __init__(self, minimum, maximum, value, parent=None):
+    def __init__(self, minimum, maximum, value,
+                 fill="#C0C0C0", bg="#404040", parent=None):
         super().__init__(parent)
         self.setMinimumHeight(16)
         self.setMaximumHeight(32)
@@ -78,6 +88,9 @@ class Scrubber(QWidget):
         self._last_mouse_x = None
         # used to slightly delay position updates to allow mouse to fully move
         self._timer = QTimer(self)
+        # color values
+        self._fill_color = fill
+        self._background_color = bg
 
     def value(self):
         return self._value
@@ -173,13 +186,13 @@ class Scrubber(QWidget):
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.fillRect(self.rect(), QColor("#3a3a3a"))
+        painter.fillRect(self.rect(), QColor(self._background_color))
         fill = 0
         if self._max > self._min:
             fill = (self._value - self._min) / (self._max - self._min)
         painter.fillRect(0, 0,
                          int(self.width() * fill), self.height(),
-                         QColor("#4a6a8a"))
+                         QColor(self._fill_color))
 
 
 class LabeledSlider(QWidget):
@@ -190,7 +203,7 @@ class LabeledSlider(QWidget):
 
     def __init__(self, label,
                  minimum, maximum, value, precision=100,
-                 parent=None):
+                 fill="#C0C0C0", bg="#404040", parent=None):
         super().__init__(parent)
         self.precision = precision
 
@@ -206,7 +219,8 @@ class LabeledSlider(QWidget):
 
         self.slider = Scrubber(int(minimum * precision),
                                int(maximum * precision),
-                               int(value * precision))
+                               int(value * precision),
+                               fill, bg)
         self.slider.valueChanged.connect(self._on_slider_changed)
         self.slider.rightClicked.connect(self._on_right_click)
 
@@ -246,7 +260,7 @@ class LabeledSlider(QWidget):
         self.slider.blockSignals(False)
 
 
-def ColorPicker(QWidget):
+class ColorPicker(QWidget):
     """
     Pick a color from the preview image.
     """
@@ -254,5 +268,49 @@ def ColorPicker(QWidget):
 
     def __init__(self, label, parent=None):
         super().__init__(parent)
-        layout = QVBoxLayout()
+        self._point: QPoint = QPoint(0, 0)
+        self._color: tuple[float, float, float] = None
+
+        main_layout = QVBoxLayout()
+        frame = QFrame()
+        frame.setFrameShape(QFrame.Shape.StyledPanel)
+        v_layout = QVBoxLayout(frame)
+        v_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        h_layout = QHBoxLayout()
+        h_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.button = QPushButton("Pick")
+        self.button.setCheckable(True)
+        self.button.clicked.connect(self._on_clicked)
+        self.label = QLabel(f"<i>{label}</i>")
+        self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.value_display = QLabel("None")
+        h_layout.addWidget(self.button)
+        h_layout.addItem(QSpacerItem(8, 32,
+                                   QSizePolicy.Policy.Minimum,
+                                   QSizePolicy.Policy.Minimum))
+        h_layout.addWidget(self.value_display)
+        v_layout.addWidget(self.label)
+        v_layout.addLayout(h_layout)
+        main_layout.addWidget(frame)
+        self.setLayout(main_layout)
+
+    def _on_clicked(self):
+        if self.button.isChecked():
+            self.button.setText("...")
+            self.pickRequested.emit()
+        else:
+            self.button.setText("Pick")
+
+    @Slot()
+    def finish_pick(self,
+                    point_x: float = None, point_y: float = None,
+                    color: tuple[float, float, float] = None):
+        # should only receive a value if it's waiting for one
+        if self.button.isChecked():
+            self.button.setChecked(False)
+            self.button.setText("Pick")
+            if color is not None:
+                self._color = color
+            if point_x is not None and point_y is not None:
+                self._point = QPoint(point_x, point_y)
+                self.value_display.setText(f"({self._point.x()}, {self._point.y()})")
