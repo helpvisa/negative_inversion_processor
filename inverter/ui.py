@@ -146,6 +146,9 @@ class EditingDisplay(QWidget):
         # wiring up functions
         self.load_button.clicked.connect(self.load_raw_file)
         self.preview_button.clicked.connect(self.preview_inverted_negative)
+        # this is super weird and fragile with many edge cases
+        # maybe instead: enable pick mode with signal, but track active picker
+        #                by letting picker pass reference to itself with signal?
         # allow pickers to trigger picker mode
         self.tool_panel.pre_inv_wb_picker.pickRequested.connect(self.image_preview.view.enable_pick_mode)
         self.tool_panel.lo_neutral_picker.pickRequested.connect(self.image_preview.view.enable_pick_mode)
