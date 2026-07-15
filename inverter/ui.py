@@ -1,11 +1,12 @@
 import sys
 import numpy as np
 from PySide6.QtCore import Qt, Slot, QThreadPool
-from PySide6.QtGui import QImage, QPixmap
+from PySide6.QtGui import QImage, QPixmap, QPalette, QColor
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget,
                                QVBoxLayout, QHBoxLayout,
                                QLabel, QPushButton, QFileDialog,
-                               QGraphicsScene, QMessageBox, QSplitter)
+                               QGraphicsScene, QMessageBox, QSplitter,
+                               QCheckBox)
 from scipy import ndimage
 import parse_cli_arguments
 from ui_classes import Worker
@@ -63,12 +64,15 @@ class ToolPanel(QWidget):
         #--- inversion tools layout
         self.inversion_tools_header = QLabel("<b>Inversion</b>")
         self.inversion_layout = QVBoxLayout()
+        self.skip_inversion_checkbox = QCheckBox("Skip Inversion")
+        self.skip_inversion_checkbox.setCheckState(Qt.CheckState.Unchecked)
         self.red_ratio_slider = LabeledSlider("Red Ratio",
                                               0.0, 3.0, 1.36, 300)
         self.blue_ratio_slider = LabeledSlider("Blue Ratio",
                                                0.0, 3.0, 0.86, 300)
         self.green_exponent_slider = LabeledSlider("Green Exponent",
                                                    0.0, 5.0, 1.5, 500)
+        self.inversion_layout.addWidget(self.skip_inversion_checkbox)
         self.inversion_layout.addWidget(self.red_ratio_slider)
         self.inversion_layout.addWidget(self.blue_ratio_slider)
         self.inversion_layout.addWidget(self.green_exponent_slider)
@@ -218,6 +222,14 @@ class MainWindow(QMainWindow):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    palette = QPalette(QColor(0,   0,   0  ),  # windowText
+                       QColor(128, 128, 128),  # window
+                       QColor(255, 255, 255),  # light
+                       QColor(0,   0,   0  ),  # dark
+                       QColor(128, 128, 128),  # mid
+                       QColor(0,   0,   0  ),  # text
+                       QColor(192, 192, 192))  # base
+    app.setPalette(palette)
     window = MainWindow()
     window.show()
     sys.exit(app.exec())

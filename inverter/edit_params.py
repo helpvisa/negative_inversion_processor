@@ -9,6 +9,7 @@ class EditParams:
     crop_inset: float = 100.0
 
     #--- inversion parameters
+    skip_inversion: bool = False
     # xy coord for sampling base colour of film
     base_color_xy: Optional[Tuple[int, int]] = None
     # inversion ratios
