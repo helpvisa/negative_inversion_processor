@@ -1,8 +1,8 @@
-from PySide6.QtCore import Qt, Signal, QPoint
+from PySide6.QtCore import Qt, Signal, QPoint, QTimer
 from PySide6.QtGui import QColor, QBrush, QPainter, QCursor
 from PySide6.QtWidgets import (QApplication, QWidget, QGraphicsView,
                                QHBoxLayout, QVBoxLayout,
-                               QLabel, QInputDialog)
+                               QLabel, QInputDialog, QPushButton)
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
 
 
@@ -76,7 +76,8 @@ class Scrubber(QWidget):
         self._value = value
         self._default = value
         self._last_mouse_x = None
-        # self._last_mouse_y = None
+        # used to slightly delay position updates to allow mouse to fully move
+        self._timer = QTimer(self)
 
     def value(self):
         return self._value
@@ -91,25 +92,41 @@ class Scrubber(QWidget):
         self._value = max(self._min, min(self._max, value))
         self.update()
 
+    def set_last_mouse_x(self, x):
+        self._last_mouse_x = x
+
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
-            self._last_mouse_x = event.globalPosition().x()
+            # teleport mouse to center of widget
+            center_x = self.width() // 2
+            center_y = self.height() // 2
+            local_center = QPoint(center_x, center_y)
+            global_center = self.mapToGlobal(local_center)
+            QCursor.setPos(global_center)
+            QApplication.processEvents()
+            # delay and initialize x for delta check
+            x_pos = event.globalPosition().x()
+            self._timer.timeout.connect(lambda: self.set_last_mouse_x(x_pos))
+            self._timer.start(1)
         elif event.button() == Qt.MouseButton.RightButton:
             self.rightClicked.emit()
 
     def mouseMoveEvent(self, event):
-        # self.setCursor(Qt.CursorShape.BlankCursor)
         if self._last_mouse_x is not None:
+            self.setCursor(Qt.CursorShape.BlankCursor)
             delta_x = event.globalPosition().x() - self._last_mouse_x
-            # delta_y = event.globalPosition().y() - self._last_mouse_y
-            self._last_mouse_x = event.globalPosition().x()
-            # self._last_mouse_y = event.globalPosition().y()
-            # restore the mouse's position so it doesn't wind up
             # in a different spot upon release of scrubber
             # doesn't work in wayland (seemingly)
-            # teleport_position = QPoint(event.globalPosition().x() + delta_x,
-                                       # event.globalPosition().y() + delta_y)
-            # QCursor.setPos(teleport_position)
+            # teleport mouse to center of widget
+            center_x = self.width() // 2
+            center_y = self.height() // 2
+            local_center = QPoint(center_x, center_y)
+            global_center = self.mapToGlobal(local_center)
+            QCursor.setPos(global_center)
+            x_pos = event.globalPosition().x()
+            self._timer.timeout.connect(lambda: self.set_last_mouse_x(x_pos))
+            self._timer.start(1)
+
             speed = 1.0
             modifiers = QApplication.keyboardModifiers()
             if modifiers & Qt.KeyboardModifier.ShiftModifier:
@@ -140,8 +157,11 @@ class Scrubber(QWidget):
             self.update()
 
     def mouseReleaseEvent(self, event):
-        # self.setCursor(Qt.CursorShape.SizeHorCursor)
-        self._last_mouse_x = None
+        self.setCursor(Qt.CursorShape.SizeHorCursor)
+        # delay also required here, to avoid overwrite from move event
+        x_pos = None
+        self._timer.timeout.connect(lambda: self.set_last_mouse_x(x_pos))
+        self._timer.start(1)
 
     def mouseDoubleClickEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -224,3 +244,15 @@ class LabeledSlider(QWidget):
         self.slider.setValue(int(value * self.precision))
         self.readout.setText(f"{value:.2f}")
         self.slider.blockSignals(False)
+
+
+def ColorPicker(QWidget):
+    """
+    Pick a color from the preview image.
+    """
+    pickRequested = Signal()
+
+    def __init__(self, label, parent=None):
+        super().__init__(parent)
+        layout = QVBoxLayout()
+        self.button = QPushButton("Pick")
