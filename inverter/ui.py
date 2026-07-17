@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget,
                                QCheckBox, QGroupBox)
 from scipy import ndimage
 import parse_cli_arguments
-from ui_classes import Worker
+from threads import Worker
 from custom_widgets import ImageView, LabeledSlider, ColorPicker
 from inverter import load_raw_image, process_negative
 from colour_management import convert_to_sRGB
@@ -24,6 +24,7 @@ CURRENT_IMAGE_SOURCE_DATA = []
 
 
 #--- create a thread pool for offloading image processing
+# here be dragons (should really be a custom class in threads.py)
 THREADPOOL = QThreadPool()
 THREAD_COUNT = THREADPOOL.maxThreadCount()
 print(f"Multithreading active with {THREAD_COUNT} threads.",
