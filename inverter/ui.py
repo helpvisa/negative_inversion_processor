@@ -14,7 +14,7 @@ from custom_widgets import ImageView, LabeledSlider, ColorPicker
 from inverter import load_raw_image, process_negative
 from colour_management import convert_to_sRGB
 from processing import rotate_image, process_all_adjustments
-from globals import GLOBAL_FLAGS
+from global_vars import GLOBAL_FLAGS
 
 
 # some global variables for tracking information about the current session

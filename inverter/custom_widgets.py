@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (QApplication, QWidget, QGraphicsView,
                                QLabel, QInputDialog, QPushButton,
                                QSpacerItem, QSizePolicy, QFrame)
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
-from globals import GLOBAL_FLAGS
+from global_vars import GLOBAL_FLAGS
 
 
 class ImageView(QGraphicsView):
