@@ -10,6 +10,7 @@ class EditParams:
 
     #--- inversion parameters
     skip_inversion: bool = False
+    bw_mode: bool = False
     # xy coord for sampling base colour of film
     base_color_xy: Optional[Tuple[int, int]] = None
     # inversion ratios
