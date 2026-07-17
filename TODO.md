@@ -11,3 +11,11 @@
 ## GUI
 - folder batch loading / exporting / sidebar explorer + previewer
     - stretch goal: include sliders on each individual preview for ez grading
+- revamp color picker
+    - currently passes (x, y) tuple to GUI element, but instead:
+        1. send signal with (x, y) tuple from ImageView
+        2. connect above signal with processing pipeline to fetch (r, g, b)
+           from that stage in the pipeline (i.e. pre-inversion, etc.)
+        3. send signal containing fetched (r, g, b) from processing pipeline
+        4. finally, connect above (r, g, b) signal with ColorPicker
+        5. result: pipeline-accurate (r, g, b) color, no stale (x, y) values

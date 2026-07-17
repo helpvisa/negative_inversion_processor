@@ -54,13 +54,29 @@ class ImageView(QGraphicsView):
             if event.button() == Qt.MouseButton.LeftButton:
                 self.set_pick_mode(False)
                 scene_pos = self.mapToScene(event.pos())
-                self.pointPicked.emit(scene_pos.x(), scene_pos.y())
+                # clamp to scene boundaries
+                scene_bounds = self.sceneRect()
+                bounded_x = max(scene_bounds.left(),
+                                min(scene_bounds.right(), scene_pos.x()))
+                bounded_y = max(scene_bounds.top(),
+                                min(scene_bounds.bottom(), scene_pos.y()))
+                self.pointPicked.emit(bounded_x, bounded_y)
             else:
                 self.set_pick_mode(False)
                 self.pointPicked.emit(None, None)
             event.accept()
             return
         super().mousePressEvent(event)
+
+    def mouseDoubleClickEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            # reset zoom
+            self.resetTransform()
+            # and re-center the view
+            scene_bounds = self.sceneRect()
+            center_x = scene_bounds.width() // 2
+            center_y = scene_bounds.height() // 2
+            self.centerOn(center_x, center_y)
 
     def wheelEvent(self, event):
         # zoom QGraphicsView in and out
@@ -314,6 +330,7 @@ class ColorPicker(QWidget):
         if self.button.isChecked():
             self.button.setChecked(False)
             self.button.setText("Pick")
-            if point_x and point_y:
+            # we need != None because 0.0 is a valid value
+            if point_x is not None and point_y is not None:
                 self._point = QPoint(point_x, point_y)
                 self.value_display.setText(f"({self._point.x()}, {self._point.y()})")
