@@ -8,12 +8,13 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget,
                                QGraphicsScene, QMessageBox, QSplitter,
                                QCheckBox, QGroupBox)
 from scipy import ndimage
-import parse_cli_arguments
 from threads import Worker
 from custom_widgets import ImageView, LabeledSlider, ColorPicker
 from inverter import load_raw_image, process_negative
 from colour_management import convert_to_sRGB
 from processing import rotate_image, process_all_adjustments
+from edit_params import EditParams
+from pipeline import ProcessingPipeline
 from global_vars import GLOBAL_FLAGS
 
 
@@ -21,6 +22,7 @@ from global_vars import GLOBAL_FLAGS
 MAX_PREVIEW_SIZE = 1280
 LOADED_RAW_PATH = None
 CURRENT_IMAGE_SOURCE_DATA = []
+PIPELINE: ProcessingPipeline = None
 
 
 #--- create a thread pool for offloading image processing
@@ -66,7 +68,7 @@ class PrimaryImageView(QWidget):
         self.setLayout(self.layout)
 
     @Slot()
-    def update_image(self):
+    def update_image(self, center=False):
         """
         Modify numpy pixel data array and update the GUI to display the new
         image
@@ -89,6 +91,8 @@ class PrimaryImageView(QWidget):
 class ToolPanel(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
+        # track all the active tools
+        self.tools = []
         #--- top-level tools layout
         self.layout = QVBoxLayout()
         self.layout.setAlignment(Qt.AlignmentFlag.AlignTop)
@@ -104,6 +108,9 @@ class ToolPanel(QWidget):
         pre_inversion_layout.addLayout(self.pre_inv_orientation_layout)
         pre_inversion_layout.addWidget(self.pre_inv_wb_picker)
         pre_inversion_groupbox.setLayout(pre_inversion_layout)
+        self.tools.extend([self.pre_inv_rotate_left,
+                           self.pre_inv_rotate_right,
+                           self.pre_inv_wb_picker])
         #--- inversion tools layout
         inversion_groupbox = QGroupBox("Inversion")
         inversion_layout = QVBoxLayout()
@@ -122,17 +129,24 @@ class ToolPanel(QWidget):
                                                "#ccccff")
         self.contrast_slider = LabeledSlider("Contrast",
                                              0.0, 5.0, 1.5, 500)
-        self.lo_neutral_picker = ColorPicker("Low Density")
-        self.hi_neutral_picker = ColorPicker("High Density")
+        self.lo_gray_picker = ColorPicker("Low Gray")
+        self.hi_gray_picker = ColorPicker("High Gray")
         inversion_layout.addLayout(checkbox_layout)
         inversion_layout.addWidget(self.red_ratio_slider)
         inversion_layout.addWidget(self.blue_ratio_slider)
         inversion_layout.addWidget(self.contrast_slider)
         density_picker_layout = QHBoxLayout()
-        density_picker_layout.addWidget(self.lo_neutral_picker)
-        density_picker_layout.addWidget(self.hi_neutral_picker)
+        density_picker_layout.addWidget(self.lo_gray_picker)
+        density_picker_layout.addWidget(self.hi_gray_picker)
         inversion_layout.addLayout(density_picker_layout)
         inversion_groupbox.setLayout(inversion_layout)
+        self.tools.extend([self.skip_inversion_checkbox,
+                           self.bw_checkbox,
+                           self.red_ratio_slider,
+                           self.blue_ratio_slider,
+                           self.contrast_slider,
+                           self.lo_gray_picker,
+                           self.hi_gray_picker])
         #--- user grading
         custom_grading_groupbox = QGroupBox("Grading")
         custom_grading_layout = QVBoxLayout()
@@ -167,6 +181,13 @@ class ToolPanel(QWidget):
         custom_grading_layout.addLayout(grading_tune_layout)
         custom_grading_layout.addWidget(self.grading_wb_picker)
         custom_grading_groupbox.setLayout(custom_grading_layout)
+        self.tools.extend([self.red_gain_slider,
+                           self.green_gain_slider,
+                           self.blue_gain_slider,
+                           self.red_tune_slider,
+                           self.green_tune_slider,
+                           self.blue_tune_slider,
+                           self.grading_wb_picker])
         #--- add all layouts
         self.layout.addWidget(pre_inversion_groupbox)
         self.layout.addWidget(inversion_groupbox)
@@ -179,6 +200,7 @@ class EditingDisplay(QWidget):
         super().__init__(parent)
         # internal tracking vars
         self.preview_image = []
+        self.edit_params = EditParams()
 
         # image preview / canvas
         self.image_preview = PrimaryImageView(self)
@@ -214,18 +236,47 @@ class EditingDisplay(QWidget):
         tp.pre_inv_rotate_left.clicked.connect(lambda: self.rotate_image(1))
         tp.pre_inv_rotate_right.clicked.connect(lambda: self.rotate_image(-1))
         # this is super weird and fragile with many edge cases
-        # i.e. two pickers can be activate at once
-        # but I kinda like it? two birds w/ one stone
+        # i.e. two pickers can be activated at once
+        # but I think I actually kinda like that?
         # allow pickers to trigger picker mode
         tp.pre_inv_wb_picker.pickRequested.connect(ip.view.enable_pick_mode)
-        tp.lo_neutral_picker.pickRequested.connect(ip.view.enable_pick_mode)
-        tp.hi_neutral_picker.pickRequested.connect(ip.view.enable_pick_mode)
+        tp.lo_gray_picker.pickRequested.connect(ip.view.enable_pick_mode)
+        tp.hi_gray_picker.pickRequested.connect(ip.view.enable_pick_mode)
         tp.grading_wb_picker.pickRequested.connect(ip.view.enable_pick_mode)
         # allow view to send values back
         ip.view.pointPicked.connect(tp.pre_inv_wb_picker.finish_pick)
-        ip.view.pointPicked.connect(tp.lo_neutral_picker.finish_pick)
-        ip.view.pointPicked.connect(tp.hi_neutral_picker.finish_pick)
+        ip.view.pointPicked.connect(tp.lo_gray_picker.finish_pick)
+        ip.view.pointPicked.connect(tp.hi_gray_picker.finish_pick)
         ip.view.pointPicked.connect(tp.grading_wb_picker.finish_pick)
+        # update_edit_params on change of any subvalue of ToolPanel
+        for tool in tp.tools:
+            if hasattr(tool, "clicked"):
+                tool.clicked.connect(self.update_edit_params)
+            elif hasattr(tool, "valueChanged"):
+                tool.valueChanged.connect(self.update_edit_params)
+
+    def update_edit_params(self):
+        global PIPELINE
+        ep = self.edit_params
+        tp = self.tool_panel
+        ep.skip_inversion = tp.skip_inversion_checkbox.isChecked()
+        ep.bw_mode = tp.bw_checkbox.isChecked() 
+        ep.base_color_xy = tp.pre_inv_wb_picker.value()
+        ep.red_ratio = tp.red_ratio_slider.value()
+        ep.blue_ratio = tp.blue_ratio_slider.value()
+        ep.green_exponent = tp.contrast_slider.value()
+        ep.lo_gray_xy = tp.lo_gray_picker.value()
+        ep.hi_gray_xy = tp.hi_gray_picker.value()
+        ep.red_gain = tp.red_gain_slider.value()
+        ep.green_gain = tp.green_gain_slider.value()
+        ep.blue_gain = tp.blue_gain_slider.value()
+        ep.wb_xy = tp.grading_wb_picker.value()
+        ep.wb_red = tp.red_tune_slider.value()
+        ep.wb_green = tp.green_tune_slider.value()
+        ep.wb_blue = tp.blue_tune_slider.value()
+        if PIPELINE:
+            PIPELINE.reprocess_image(ep.copy())
+        
 
     def load_raw_file(self):
         # load raw image and resize it for the preview pane
@@ -249,10 +300,13 @@ class EditingDisplay(QWidget):
             # the function to be executed upon thread completion
             def post_func(image_data):
                 global CURRENT_IMAGE_SOURCE_DATA
+                global PIPELINE
                 CURRENT_IMAGE_SOURCE_DATA = image_data
+                PIPELINE = ProcessingPipeline(image_data)
+                self.edit_params = EditParams()
                 self.preview_image = image_data
                 self.image_preview.image_array = self.preview_image
-                self.image_preview.update_image()
+                self.image_preview.update_image(center=True)
                 self.current_file_label.setText(LOADED_RAW_PATH)
                 self.load_button.setEnabled(True)
             def error_func(e):
@@ -291,7 +345,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Negative Inversion Processor")
         self.editing_display = EditingDisplay()
         self.setCentralWidget(self.editing_display)
-        self.resize(1600, 800)
+        self.resize(1400, 600)
 
 
 if __name__ == "__main__":

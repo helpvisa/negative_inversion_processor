@@ -1,4 +1,5 @@
-from dataclasses import dataclass, asdict
+import copy
+from dataclasses import dataclass
 from typing import Optional, Tuple
 
 
@@ -37,4 +38,4 @@ class EditParams:
         Return a deep copy of the current parameters.
         Helpful for navigating multithreaded situations.
         """
-        return EditParams(**asdict(self))
+        return copy.deepcopy(self)

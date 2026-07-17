@@ -20,7 +20,7 @@ class ImageView(QGraphicsView):
     pointPicked = Signal(float, float)
 
     def __init__(self, parent=None):
-        super(ImageView, self).__init__(parent)
+        super().__init__(parent)
         self._pick_mode = False
         # configure view properties
         self.setViewport(QOpenGLWidget())
@@ -288,6 +288,7 @@ class ColorPicker(QWidget):
     Pick a color from the preview image.
     """
     pickRequested = Signal()
+    valueChanged = Signal(float, float)
 
     def __init__(self, label, parent=None):
         super().__init__(parent)
@@ -324,6 +325,9 @@ class ColorPicker(QWidget):
         else:
             self.button.setText("Pick")
 
+    def value(self):
+        return (self._point.x(), self._point.y())
+
     @Slot()
     def finish_pick(self, point_x: float = None, point_y: float = None):
         # should only receive a value if it's waiting for one
@@ -334,3 +338,4 @@ class ColorPicker(QWidget):
             if point_x is not None and point_y is not None:
                 self._point = QPoint(point_x, point_y)
                 self.value_display.setText(f"({self._point.x()}, {self._point.y()})")
+                self.valueChanged.emit(point_x, point_y)

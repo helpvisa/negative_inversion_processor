@@ -1,12 +1,15 @@
+cachebox==5.2.3
 colour-science==0.4.7
 contourpy==1.3.3
 cycler==0.12.1
+deepdiff==9.1.0
 fonttools==4.63.0
 imagecodecs==2026.6.6
 kiwisolver==1.5.0
 matplotlib==3.11.0
 numpy==2.4.6
 opencolorio==2.5.2
+orderly-set==5.5.0
 packaging==26.2
 pillow==12.2.0
 pyparsing==3.3.2
