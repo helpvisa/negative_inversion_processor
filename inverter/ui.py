@@ -14,6 +14,7 @@ from custom_widgets import ImageView, LabeledSlider, ColorPicker
 from inverter import load_raw_image, process_negative
 from colour_management import convert_to_sRGB
 from processing import process_all_adjustments
+from globals import GLOBAL_FLAGS
 
 
 # derive from QWidget to create a custom updateable image class
@@ -289,6 +290,10 @@ class MainWindow(QMainWindow):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    # what display server? do we support mouse warp?
+    GLOBAL_FLAGS["platform"] = app.platformName()
+    print(f"Running on {GLOBAL_FLAGS['platform']} platform",
+          file=sys.stderr)
     # load custom QSS stylesheet
     with open("inverter/styles.qss", "r") as qss:
         _styles = qss.read()

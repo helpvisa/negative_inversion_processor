@@ -6,6 +6,7 @@ from PySide6.QtWidgets import (QApplication, QWidget, QGraphicsView,
                                QLabel, QInputDialog, QPushButton,
                                QSpacerItem, QSizePolicy, QFrame)
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
+from globals import GLOBAL_FLAGS
 
 
 class ImageView(QGraphicsView):
@@ -118,33 +119,36 @@ class Scrubber(QWidget):
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
             # hide and teleport mouse to center of widget
-            self.setCursor(Qt.CursorShape.BlankCursor)
-            center_x = self.width() // 2
-            center_y = self.height() // 2
-            local_center = QPoint(center_x, center_y)
-            global_center = self.mapToGlobal(local_center)
-            QCursor.setPos(global_center)
-            QApplication.processEvents()
-            # delay and initialize x for delta check
-            self._timer.timeout.connect(lambda: self.set_last_mouse_x(global_center.x()))
-            self._timer.start(1)
+            if GLOBAL_FLAGS['platform'] != "wayland":
+                self.setCursor(Qt.CursorShape.BlankCursor)
+                center_x = self.width() // 2
+                center_y = self.height() // 2
+                local_center = QPoint(center_x, center_y)
+                global_center = self.mapToGlobal(local_center)
+                QCursor.setPos(global_center)
+                QApplication.processEvents()
+                self._timer.timeout.connect(lambda: self.set_last_mouse_x(global_center.x()))
+                self._timer.start(1)
+            else:
+                self.set_last_mouse_x(event.globalPosition().x())
         elif event.button() == Qt.MouseButton.RightButton:
             self.rightClicked.emit()
 
     def mouseMoveEvent(self, event):
         if self._last_mouse_x is not None:
             delta_x = event.globalPosition().x() - self._last_mouse_x
-            # in a different spot upon release of scrubber
-            # doesn't work in wayland (seemingly)
             # teleport mouse to center of widget
-            center_x = self.width() // 2
-            center_y = self.height() // 2
-            local_center = QPoint(center_x, center_y)
-            global_center = self.mapToGlobal(local_center)
-            QCursor.setPos(global_center)
-            x_pos = event.globalPosition().x()
-            self._timer.timeout.connect(lambda: self.set_last_mouse_x(x_pos))
-            self._timer.start(50)
+            if GLOBAL_FLAGS['platform'] != 'wayland':
+                center_x = self.width() // 2
+                center_y = self.height() // 2
+                local_center = QPoint(center_x, center_y)
+                global_center = self.mapToGlobal(local_center)
+                QCursor.setPos(global_center)
+                x_pos = event.globalPosition().x()
+                self._timer.timeout.connect(lambda: self.set_last_mouse_x(x_pos))
+                self._timer.start(50)
+            else:
+                self.set_last_mouse_x(event.globalPosition().x())
 
             speed = 1.0
             modifiers = QApplication.keyboardModifiers()
@@ -178,9 +182,11 @@ class Scrubber(QWidget):
     def mouseReleaseEvent(self, event):
         self.setCursor(Qt.CursorShape.SizeHorCursor)
         # delay also required here, to avoid overwrite from move event
-        x_pos = None
-        self._timer.timeout.connect(lambda: self.set_last_mouse_x(x_pos))
-        self._timer.start(1)
+        if GLOBAL_FLAGS['platform'] != 'wayland':
+            self._timer.timeout.connect(lambda: self.set_last_mouse_x(None))
+            self._timer.start(1)
+        else:
+            self.set_last_mouse_x(None)
 
     def mouseDoubleClickEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
