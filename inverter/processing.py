@@ -42,6 +42,10 @@ def save_image(image_data, output_path, tiff_format, icc_profile):
     print(f"Saved inversion to {output_path}", file=sys.stderr)
 
 
+def rotate_image(image_data, direction):
+    return np.rot90(image_data, k=direction)
+
+
 # many of the functions below should probably be altered to directly modify
 # image data instead of passing it all around and here and there
 # it would save on a lot of memory shuffling!

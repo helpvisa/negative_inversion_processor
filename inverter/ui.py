@@ -13,10 +13,40 @@ from ui_classes import Worker
 from custom_widgets import ImageView, LabeledSlider, ColorPicker
 from inverter import load_raw_image, process_negative
 from colour_management import convert_to_sRGB
-from processing import process_all_adjustments
+from processing import rotate_image, process_all_adjustments
 from globals import GLOBAL_FLAGS
 
 
+# some global variables for tracking information about the current session
+MAX_PREVIEW_SIZE = 1280
+LOADED_RAW_PATH = None
+CURRENT_IMAGE_SOURCE_DATA = []
+
+
+#--- create a thread pool for offloading image processing
+THREADPOOL = QThreadPool()
+THREAD_COUNT = THREADPOOL.maxThreadCount()
+print(f"Multithreading active with {THREAD_COUNT} threads.",
+      file=sys.stderr)
+# hold threads to prevent garbage collection
+# and initialize a thread_id iterator
+ACTIVE_THREADS = {}
+THREAD_ID = 0
+
+
+def instantiate_thread(func, *args, **kwargs):
+    global THREAD_ID
+    THREAD_ID += 1
+    thread = Worker(func, thread_id=THREAD_ID)
+    return thread
+
+
+def remove_thread(thread_id):
+    global ACTIVE_THREADS
+    ACTIVE_THREADS[thread_id] = None
+
+
+#--- UI Definitions
 # derive from QWidget to create a custom updateable image class
 class PrimaryImageView(QWidget):
     def __init__(self, parent=None):
@@ -142,22 +172,7 @@ class EditingDisplay(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         # internal tracking vars
-        self.current_raw = None
-        self.source_image = []
         self.preview_image = []
-
-        # load an initial set of user args just to populate the values
-        self.args = parse_cli_arguments.parse_user_arguments()
-        
-        # create a thread pool for triggering image processing
-        self.threadpool = QThreadPool()
-        thread_count = self.threadpool.maxThreadCount()
-        print(f"Multithreading active with {thread_count} threads.",
-              file=sys.stderr)
-        # hold threads to prevent garbage collection
-        # and initialize a thread_id iterator
-        self.active_threads = {}
-        self.thread_id = 0
 
         # image preview / canvas
         self.image_preview = PrimaryImageView(self)
@@ -165,9 +180,6 @@ class EditingDisplay(QWidget):
         # demo controls
         self.current_file_label = QLabel("NO FILE LOADED")
         self.load_button = QPushButton("Load Image")
-        self.rotate_left_button = QPushButton("Rotate Left")
-        self.rotate_right_button = QPushButton("Rotate Right")
-        self.preview_button = QPushButton("Preview Image")
         # actual side panel
         self.tool_panel = ToolPanel()
 
@@ -189,94 +201,83 @@ class EditingDisplay(QWidget):
         self.setLayout(self.layout)
 
         # wiring up functions
+        # include some quick shorthand variables for readability
+        tp = self.tool_panel
+        ip = self.image_preview
         self.load_button.clicked.connect(self.load_raw_file)
-        self.preview_button.clicked.connect(self.preview_inverted_negative)
+        tp.pre_inv_rotate_left.clicked.connect(lambda: self.rotate_image(1))
+        tp.pre_inv_rotate_right.clicked.connect(lambda: self.rotate_image(-1))
         # this is super weird and fragile with many edge cases
         # maybe instead: enable pick mode with signal, but track active picker
         #                by letting picker pass reference to itself with signal?
         #                could `self.sender` be a solution?
         # allow pickers to trigger picker mode
-        self.tool_panel.pre_inv_wb_picker.pickRequested.connect(self.image_preview.view.enable_pick_mode)
-        self.tool_panel.lo_neutral_picker.pickRequested.connect(self.image_preview.view.enable_pick_mode)
-        self.tool_panel.hi_neutral_picker.pickRequested.connect(self.image_preview.view.enable_pick_mode)
+        tp.pre_inv_wb_picker.pickRequested.connect(ip.view.enable_pick_mode)
+        tp.lo_neutral_picker.pickRequested.connect(ip.view.enable_pick_mode)
+        tp.hi_neutral_picker.pickRequested.connect(ip.view.enable_pick_mode)
+        tp.grading_wb_picker.pickRequested.connect(ip.view.enable_pick_mode)
         # allow view to send values back
-        self.image_preview.view.pointPicked.connect(self.tool_panel.pre_inv_wb_picker.finish_pick)
-        self.image_preview.view.pointPicked.connect(self.tool_panel.lo_neutral_picker.finish_pick)
-        self.image_preview.view.pointPicked.connect(self.tool_panel.hi_neutral_picker.finish_pick)
-
-    def remove_thread(self, thread_id):
-        self.active_threads[thread_id] = None
+        ip.view.pointPicked.connect(tp.pre_inv_wb_picker.finish_pick)
+        ip.view.pointPicked.connect(tp.lo_neutral_picker.finish_pick)
+        ip.view.pointPicked.connect(tp.hi_neutral_picker.finish_pick)
+        ip.view.pointPicked.connect(tp.grading_wb_picker.finish_pick)
 
     def load_raw_file(self):
         # load raw image and resize it for the preview pane
         image_path, discard_text = QFileDialog.getOpenFileName()
         if image_path:
+            global THREADPOOL
+            global ACTIVE_THREADS
+            global LOADED_RAW_PATH
+            LOADED_RAW_PATH = image_path
             # disable button while we load the new image
-            self.current_raw = image_path
             self.load_button.setEnabled(False)
-            self.preview_button.setEnabled(False)
             self.current_file_label.setText("Loading your image...")
             # the function to be executed within a separate thread
             def init_func():
                 raw = load_raw_image(image_path).astype(np.float32) / 65535.0
-                raw = ndimage.zoom(raw, (0.25, 0.25, 1), order=3)
+                height, width, _ = raw.shape
+                # preview size maxes out at 1920 for easier processing
+                preview_scale = MAX_PREVIEW_SIZE / width
+                raw = ndimage.zoom(raw, (preview_scale, preview_scale, 1), order=0)
                 return raw
             # the function to be executed upon thread completion
             def post_func(image_data):
-                self.source_image = image_data
-                self.image_preview.image_array = self.source_image
+                global CURRENT_IMAGE_SOURCE_DATA
+                CURRENT_IMAGE_SOURCE_DATA = image_data
+                self.preview_image = image_data
+                self.image_preview.image_array = self.preview_image
                 self.image_preview.update_image()
-                self.current_file_label.setText(self.current_raw)
+                self.current_file_label.setText(LOADED_RAW_PATH)
                 self.load_button.setEnabled(True)
-                self.preview_button.setEnabled(True)
             def error_func(e):
                 exctype, value, error = e
                 # tell user there's an issue
                 QMessageBox.critical(self, "Error processing image!", error)
                 # and re-enable the buttons
                 self.current_file_label.setText("NO FILE LOADED")
-                self.preview_button.setEnabled(True)
                 self.load_button.setEnabled(True)
             # instantiate and run a thread
             # should split this out into its own function, surely
-            thread = self.instantiate_thread(init_func)
-            self.active_threads[thread.thread_id] = thread
+            thread = instantiate_thread(init_func)
+            ACTIVE_THREADS[thread.thread_id] = thread
             thread.signals.result.connect(post_func)
             thread.signals.error.connect(error_func)
-            thread.signals.finished.connect(self.remove_thread)
-            self.threadpool.start(thread)
+            thread.signals.finished.connect(remove_thread)
+            THREADPOOL.start(thread)
 
-    def preview_inverted_negative(self):
-        if len(self.source_image) > 0:
-            self.load_button.setEnabled(False)
-            self.preview_button.setEnabled(False)
-            def init_func():
-                adjustments = process_negative(self.source_image,
-                                               self.args)
-                return process_all_adjustments(self.source_image,
-                                               adjustments)
-            def post_func(image_data):
-                self.preview_image = image_data
-                self.image_preview.image_array = self.preview_image
-                self.image_preview.update_image()
-                self.preview_button.setEnabled(True)
-                self.load_button.setEnabled(True)
-            def error_func(e):
-                exctype, value, error = e
-                QMessageBox.critical(self, "Error processing image!", error)
-                self.preview_button.setEnabled(True)
-                self.load_button.setEnabled(True)
-            thread = self.instantiate_thread(init_func)
-            self.active_threads[thread.thread_id] = thread
-            thread.signals.result.connect(post_func)
-            thread.signals.error.connect(error_func)
-            thread.signals.finished.connect(self.remove_thread)
-            self.threadpool.start(thread)
-
-    def instantiate_thread(self, func, *args, **kwargs):
-        self.thread_id += 1
-        thread = Worker(func, thread_id=self.thread_id)
-        return thread
+    def rotate_image(self, direction):
+        global ACTIVE_THREADS
+        global THREADPOOL
+        def init_func():
+            self.preview_image = rotate_image(self.preview_image, direction)
+        def post_func():
+            self.image_preview.image_array = self.preview_image
+            self.image_preview.update_image()
+        thread = instantiate_thread(init_func)
+        ACTIVE_THREADS[thread.thread_id] = thread
+        thread.signals.result.connect(post_func)
+        THREADPOOL.start(thread)
 
 
 class MainWindow(QMainWindow):
@@ -285,7 +286,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Negative Inversion Processor")
         self.editing_display = EditingDisplay()
         self.setCentralWidget(self.editing_display)
-        self.resize(1200, 800)
+        self.resize(1600, 800)
 
 
 if __name__ == "__main__":

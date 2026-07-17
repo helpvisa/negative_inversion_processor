@@ -53,12 +53,7 @@ class ImageView(QGraphicsView):
         if self._pick_mode:
             if event.button() == Qt.MouseButton.LeftButton:
                 self.set_pick_mode(False)
-                # confine the mapped point to the image boundary
-                v_rect = QRectF(self.viewport().rect())
-                bounded_x = max(v_rect.left(), min(event.pos().x(), v_rect.right()))
-                bounded_y = max(v_rect.top(), min(event.pos().y(), v_rect.bottom()))
-                bounded_pf = QPointF(bounded_x, bounded_y)
-                scene_pos = self.mapToScene(bounded_pf.toPoint())
+                scene_pos = self.mapToScene(event.pos())
                 self.pointPicked.emit(scene_pos.x(), scene_pos.y())
             else:
                 self.set_pick_mode(False)
