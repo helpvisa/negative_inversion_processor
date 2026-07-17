@@ -290,7 +290,7 @@ class ColorPicker(QWidget):
     pickRequested = Signal()
     valueChanged = Signal(float, float)
 
-    def __init__(self, label, parent=None):
+    def __init__(self, label, hide_value=False, parent=None):
         super().__init__(parent)
         self._point: QPoint = QPoint(0, 0)
         self._color: tuple[float, float, float] = None
@@ -312,7 +312,8 @@ class ColorPicker(QWidget):
         h_layout.addItem(QSpacerItem(8, 32,
                                    QSizePolicy.Policy.Minimum,
                                    QSizePolicy.Policy.Minimum))
-        h_layout.addWidget(self.value_display)
+        if not hide_value:
+            h_layout.addWidget(self.value_display)
         v_layout.addWidget(self.label)
         v_layout.addLayout(h_layout)
         main_layout.addWidget(frame)

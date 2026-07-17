@@ -12,7 +12,7 @@ from threads import Worker
 from custom_widgets import ImageView, LabeledSlider, ColorPicker
 from inverter import load_raw_image, process_negative
 from colour_management import convert_to_sRGB
-from processing import rotate_image, process_all_adjustments
+from processing import process_all_adjustments
 from edit_params import EditParams
 from pipeline import ProcessingPipeline
 from global_vars import GLOBAL_FLAGS
@@ -53,6 +53,7 @@ def remove_thread(thread_id):
 # derive from QWidget to create a custom updateable image class
 class PrimaryImageView(QWidget):
     def __init__(self, parent=None):
+        global PIPELINE
         super(PrimaryImageView, self).__init__(parent)
         self.setMinimumSize(600, 400)
 
@@ -67,13 +68,18 @@ class PrimaryImageView(QWidget):
         self.layout.addWidget(self.view)
         self.setLayout(self.layout)
 
+
     @Slot()
     def update_image(self, center=False):
         """
         Modify numpy pixel data array and update the GUI to display the new
         image
         """
-        display_image, sRGB_profile = convert_to_sRGB(self.image_array)
+        global PIPELINE
+        preview_image = PIPELINE.final_preview.copy()
+        if preview_image.ndim < 3:
+            preview_image = preview_image.repeat(3, axis=-1)
+        display_image, sRGB_profile = convert_to_sRGB(PIPELINE.final_preview)
         display_image = np.clip(display_image, a_min=0, a_max=1)
         q_image = QImage(np.multiply(display_image, 255).astype(np.uint8),
                          display_image.shape[1],
@@ -85,7 +91,8 @@ class PrimaryImageView(QWidget):
         self.preview_pixmap.setPixmap(new_pixmap)
         # resize view to match image
         self.scene.setSceneRect(self.preview_pixmap.boundingRect())
-        self.view.centerOn(self.preview_pixmap)
+        if center:
+            self.view.centerOn(self.preview_pixmap)
 
 
 class ToolPanel(QWidget):
@@ -176,10 +183,14 @@ class ToolPanel(QWidget):
         grading_tune_layout.addWidget(self.red_tune_slider)
         grading_tune_layout.addWidget(self.green_tune_slider)
         grading_tune_layout.addWidget(self.blue_tune_slider)
-        self.grading_wb_picker = ColorPicker("White Balance Point")
+        self.grading_wb_picker = ColorPicker("Pick White Balance",
+                                             hide_value=True)
+        self.exposure_slider = LabeledSlider("Exposure Compensation",
+                                             0.0, 10.0, 1.0, 1000)
         custom_grading_layout.addLayout(grading_gain_layout)
         custom_grading_layout.addLayout(grading_tune_layout)
         custom_grading_layout.addWidget(self.grading_wb_picker)
+        custom_grading_layout.addWidget(self.exposure_slider)
         custom_grading_groupbox.setLayout(custom_grading_layout)
         self.tools.extend([self.red_gain_slider,
                            self.green_gain_slider,
@@ -187,7 +198,8 @@ class ToolPanel(QWidget):
                            self.red_tune_slider,
                            self.green_tune_slider,
                            self.blue_tune_slider,
-                           self.grading_wb_picker])
+                           self.grading_wb_picker,
+                           self.exposure_slider])
         #--- add all layouts
         self.layout.addWidget(pre_inversion_groupbox)
         self.layout.addWidget(inversion_groupbox)
@@ -199,11 +211,12 @@ class EditingDisplay(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         # internal tracking vars
-        self.preview_image = []
         self.edit_params = EditParams()
 
         # image preview / canvas
         self.image_preview = PrimaryImageView(self)
+        self.preview_scale = 1.0
+
         # controls
         # demo controls
         self.current_file_label = QLabel("NO FILE LOADED")
@@ -232,9 +245,10 @@ class EditingDisplay(QWidget):
         # include some quick shorthand variables for readability
         tp = self.tool_panel
         ip = self.image_preview
+        ep = self.edit_params
         self.load_button.clicked.connect(self.load_raw_file)
-        tp.pre_inv_rotate_left.clicked.connect(lambda: self.rotate_image(1))
-        tp.pre_inv_rotate_right.clicked.connect(lambda: self.rotate_image(-1))
+        tp.pre_inv_rotate_left.clicked.connect(lambda: self.update_rotation(1))
+        tp.pre_inv_rotate_right.clicked.connect(lambda: self.update_rotation(-1))
         # this is super weird and fragile with many edge cases
         # i.e. two pickers can be activated at once
         # but I think I actually kinda like that?
@@ -255,6 +269,14 @@ class EditingDisplay(QWidget):
             elif hasattr(tool, "valueChanged"):
                 tool.valueChanged.connect(self.update_edit_params)
 
+    def update_rotation(self, direction):
+        global PIPELINE
+        ep = self.edit_params
+        ep.rotation = ep.rotation + direction
+        if PIPELINE:
+            PIPELINE.process_image(ep.copy())
+
+
     def update_edit_params(self):
         global PIPELINE
         ep = self.edit_params
@@ -274,8 +296,9 @@ class EditingDisplay(QWidget):
         ep.wb_red = tp.red_tune_slider.value()
         ep.wb_green = tp.green_tune_slider.value()
         ep.wb_blue = tp.blue_tune_slider.value()
+        ep.exposure_comp = tp.exposure_slider.value()
         if PIPELINE:
-            PIPELINE.reprocess_image(ep.copy())
+            PIPELINE.process_image(ep.copy())
         
 
     def load_raw_file(self):
@@ -294,18 +317,20 @@ class EditingDisplay(QWidget):
                 raw = load_raw_image(image_path).astype(np.float32) / 65535.0
                 height, width, _ = raw.shape
                 # preview size maxes out at 1920 for easier processing
-                preview_scale = MAX_PREVIEW_SIZE / width
-                raw = ndimage.zoom(raw, (preview_scale, preview_scale, 1), order=0)
+                self.preview_scale = MAX_PREVIEW_SIZE / width
+                raw = ndimage.zoom(raw, (self.preview_scale,
+                                         self.preview_scale, 1), order=0)
                 return raw
             # the function to be executed upon thread completion
             def post_func(image_data):
                 global CURRENT_IMAGE_SOURCE_DATA
                 global PIPELINE
                 CURRENT_IMAGE_SOURCE_DATA = image_data
-                PIPELINE = ProcessingPipeline(image_data)
+                PIPELINE = ProcessingPipeline(image_data,
+                                              scale=self.preview_scale)
+                # connect pipeline alerts to update_image pipeline
+                PIPELINE.previewUpdated.connect(self.image_preview.update_image)
                 self.edit_params = EditParams()
-                self.preview_image = image_data
-                self.image_preview.image_array = self.preview_image
                 self.image_preview.update_image(center=True)
                 self.current_file_label.setText(LOADED_RAW_PATH)
                 self.load_button.setEnabled(True)
@@ -324,19 +349,6 @@ class EditingDisplay(QWidget):
             thread.signals.error.connect(error_func)
             thread.signals.finished.connect(remove_thread)
             THREADPOOL.start(thread)
-
-    def rotate_image(self, direction):
-        global ACTIVE_THREADS
-        global THREADPOOL
-        def init_func():
-            self.preview_image = rotate_image(self.preview_image, direction)
-        def post_func():
-            self.image_preview.image_array = self.preview_image
-            self.image_preview.update_image()
-        thread = instantiate_thread(init_func)
-        ACTIVE_THREADS[thread.thread_id] = thread
-        thread.signals.result.connect(post_func)
-        THREADPOOL.start(thread)
 
 
 class MainWindow(QMainWindow):

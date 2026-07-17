@@ -184,7 +184,7 @@ def shift_blacks(image_data, analysis_inset):
     return adjustment
 
 
-def white_balance(image_data, region, colourspace_weights,
+def white_balance(image_data, region=None, colourspace_weights=None,
                   custom_wb_point=None, mode='mult'):
     """
     White balance a "brightest point" visible within the bounding box of the
@@ -194,9 +194,6 @@ def white_balance(image_data, region, colourspace_weights,
 
     Return a dictionary reprsenting the type of adjustment and its values.
     """
-    # create pre-inversion analysis region
-    analysis_region = image_data[region[0][1]:region[1][1],
-                                 region[0][0]:region[1][0]]
     max_rgb_values = None
     if custom_wb_point:
         print(f"CUSTOM: Custom balance point: {custom_wb_point}",
@@ -205,7 +202,10 @@ def white_balance(image_data, region, colourspace_weights,
                                               custom_wb_point[0],
                                               custom_wb_point[1],
                                               16)
-    else:
+    elif region:
+        # create pre-inversion analysis region
+        analysis_region = image_data[region[0][1]:region[1][1],
+                                     region[0][0]:region[1][0]]
         max_rgb_values = find_brightest_luminance_spot(analysis_region,
                                                        colourspace_weights)
     # determine reference exponents for balance
@@ -230,24 +230,29 @@ def white_balance(image_data, region, colourspace_weights,
     return adjustment
 
 
-def density_balance(image_data, region, exponent=1.5, ref_point_in=None,
+def density_balance(image_data, region=None, exponent=1.5, ref_point_in=None,
                     red_ratio=1.36, blue_ratio=0.86):
     """
     Multiply the individual colour channels until equalized at a given point.
     Neutralizes colour casts in highlights and shadows.
     """
-    analysis_region = image_data[region[0][1]:region[1][1],
-                                 region[0][0]:region[1][0]]
     ref_in = None
     if ref_point_in:
         print(f"CUSTOM: Custom reference point: {ref_point_in}",
               file=sys.stderr)
         ref_in = image_data[ref_point_in[1], ref_point_in[0]]
-    else:
+    elif region:
+        analysis_region = image_data[region[0][1]:region[1][1],
+                                     region[0][0]:region[1][0]]
         # estimate a reference median point in the image
         r_med = np.median(analysis_region[:, :, 0])
         g_med = np.median(analysis_region[:, :, 1])
         b_med = np.median(analysis_region[:, :, 2])
+        ref_in = [r_med, g_med, b_med]
+    else:
+        r_med = np.median(image_data[:, :, 0])
+        g_med = np.median(image_data[:, :, 1])
+        b_med = np.median(image_data[:, :, 2])
         ref_in = [r_med, g_med, b_med]
     # peg our output value to middle gray
     # -log10(0.18) = ~0.745 for density-space value

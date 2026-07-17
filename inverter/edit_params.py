@@ -26,12 +26,13 @@ class EditParams:
     red_gain: float = 1.0
     green_gain: float = 1.0
     blue_gain: float = 1.0
-    # color picker for white-balancing (addition) post-invert
-    wb_xy: Optional[Tuple[int ,int]] = None
+    # wb picker
+    wb_xy: Optional[Tuple[int, int]] = None
     # with rgb values for additional fine-tuning
     wb_red: float = 0.0
     wb_green: float = 0.0
     wb_blue: float = 0.0
+    exposure_comp: float = 1.0
 
     def copy(self) -> "EditParams":
         """
