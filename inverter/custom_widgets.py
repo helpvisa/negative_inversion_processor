@@ -1,4 +1,5 @@
-from PySide6.QtCore import Qt, Slot, Signal, QPoint, QTimer
+from PySide6.QtCore import (Qt, Slot, Signal, QPoint, QTimer,
+                            QPointF, QRectF)
 from PySide6.QtGui import QColor, QBrush, QPainter, QCursor
 from PySide6.QtWidgets import (QApplication, QWidget, QGraphicsView,
                                QHBoxLayout, QVBoxLayout,
@@ -50,11 +51,17 @@ class ImageView(QGraphicsView):
         # intercept clicks if we're in pick mode
         if self._pick_mode:
             if event.button() == Qt.MouseButton.LeftButton:
-                scene_pos = self.mapToScene(event.pos())
                 self.set_pick_mode(False)
+                # confine the mapped point to the image boundary
+                v_rect = QRectF(self.viewport().rect())
+                bounded_x = max(v_rect.left(), min(event.pos().x(), v_rect.right()))
+                bounded_y = max(v_rect.top(), min(event.pos().y(), v_rect.bottom()))
+                bounded_pf = QPointF(bounded_x, bounded_y)
+                scene_pos = self.mapToScene(bounded_pf.toPoint())
                 self.pointPicked.emit(scene_pos.x(), scene_pos.y())
             else:
                 self.set_pick_mode(False)
+                self.pointPicked.emit(None, None)
             event.accept()
             return
         super().mousePressEvent(event)
@@ -110,7 +117,8 @@ class Scrubber(QWidget):
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
-            # teleport mouse to center of widget
+            # hide and teleport mouse to center of widget
+            self.setCursor(Qt.CursorShape.BlankCursor)
             center_x = self.width() // 2
             center_y = self.height() // 2
             local_center = QPoint(center_x, center_y)
@@ -118,15 +126,13 @@ class Scrubber(QWidget):
             QCursor.setPos(global_center)
             QApplication.processEvents()
             # delay and initialize x for delta check
-            x_pos = event.globalPosition().x()
-            self._timer.timeout.connect(lambda: self.set_last_mouse_x(x_pos))
+            self._timer.timeout.connect(lambda: self.set_last_mouse_x(global_center.x()))
             self._timer.start(1)
         elif event.button() == Qt.MouseButton.RightButton:
             self.rightClicked.emit()
 
     def mouseMoveEvent(self, event):
         if self._last_mouse_x is not None:
-            self.setCursor(Qt.CursorShape.BlankCursor)
             delta_x = event.globalPosition().x() - self._last_mouse_x
             # in a different spot upon release of scrubber
             # doesn't work in wayland (seemingly)
@@ -138,7 +144,7 @@ class Scrubber(QWidget):
             QCursor.setPos(global_center)
             x_pos = event.globalPosition().x()
             self._timer.timeout.connect(lambda: self.set_last_mouse_x(x_pos))
-            self._timer.start(1)
+            self._timer.start(50)
 
             speed = 1.0
             modifiers = QApplication.keyboardModifiers()
@@ -154,7 +160,7 @@ class Scrubber(QWidget):
                 self.update()
 
     def wheelEvent(self, event):
-        speed = 5.0
+        speed = 10.0
         modifiers = QApplication.keyboardModifiers()
         if modifiers & Qt.KeyboardModifier.ShiftModifier:
             speed = 50.0
@@ -302,15 +308,11 @@ class ColorPicker(QWidget):
             self.button.setText("Pick")
 
     @Slot()
-    def finish_pick(self,
-                    point_x: float = None, point_y: float = None,
-                    color: tuple[float, float, float] = None):
+    def finish_pick(self, point_x: float = None, point_y: float = None):
         # should only receive a value if it's waiting for one
         if self.button.isChecked():
             self.button.setChecked(False)
             self.button.setText("Pick")
-            if color is not None:
-                self._color = color
-            if point_x is not None and point_y is not None:
+            if point_x and point_y:
                 self._point = QPoint(point_x, point_y)
                 self.value_display.setText(f"({self._point.x()}, {self._point.y()})")

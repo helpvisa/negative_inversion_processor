@@ -1,0 +1,24 @@
+QGroupBox {
+    font-weight: bold;
+    font-size: 14px;
+    margin: 8px;
+    padding: 8px;
+    border-width: 1px;
+    border-style: solid;
+    border-color: #606060;
+    border-radius: 4px;
+}
+
+QGroupBox::title {
+    top: -10px;
+    margin: 8px;
+    subcontrol-origin: margin;
+    subcontrol-position: top centre;
+}
+
+StyledPanel {
+    border-width: 1px;
+    border-style: solid;
+    border-color: #606060;
+    border-radius: 4px;
+}

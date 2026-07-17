@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget,
                                QVBoxLayout, QHBoxLayout,
                                QLabel, QPushButton, QFileDialog,
                                QGraphicsScene, QMessageBox, QSplitter,
-                               QCheckBox)
+                               QCheckBox, QGroupBox)
 from scipy import ndimage
 import parse_cli_arguments
 from ui_classes import Worker
@@ -57,14 +57,23 @@ class PrimaryImageView(QWidget):
 class ToolPanel(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-
         #--- top-level tools layout
         self.layout = QVBoxLayout()
         self.layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        #--- initial white balance
+        #--- pre-inversion layout (orientation and initial white balance)
+        self.pre_inversion_groupbox = QGroupBox("Pre-Inversion")
+        self.pre_inversion_layout = QVBoxLayout()
+        self.pre_inv_orientation_layout = QHBoxLayout()
+        self.pre_inv_rotate_left = QPushButton("Rotate Left")
+        self.pre_inv_rotate_right = QPushButton("Rotate Right")
+        self.pre_inv_orientation_layout.addWidget(self.pre_inv_rotate_left)
+        self.pre_inv_orientation_layout.addWidget(self.pre_inv_rotate_right)
         self.pre_inv_wb_picker = ColorPicker("Dmin - Base Color")
+        self.pre_inversion_layout.addLayout(self.pre_inv_orientation_layout)
+        self.pre_inversion_layout.addWidget(self.pre_inv_wb_picker)
+        self.pre_inversion_groupbox.setLayout(self.pre_inversion_layout)
         #--- inversion tools layout
-        self.inversion_tools_header = QLabel("<b>Inversion</b>")
+        self.inversion_groupbox = QGroupBox("Inversion")
         self.inversion_layout = QVBoxLayout()
         self.skip_inversion_checkbox = QCheckBox("Skip Inversion")
         self.skip_inversion_checkbox.setCheckState(Qt.CheckState.Unchecked)
@@ -86,10 +95,45 @@ class ToolPanel(QWidget):
         density_picker_layout.addWidget(self.lo_neutral_picker)
         density_picker_layout.addWidget(self.hi_neutral_picker)
         self.inversion_layout.addLayout(density_picker_layout)
+        self.inversion_groupbox.setLayout(self.inversion_layout)
+        #--- user grading
+        self.custom_grading_groupbox = QGroupBox("Grading")
+        self.custom_grading_layout = QVBoxLayout()
+        self.grading_gain_layout = QHBoxLayout()
+        self.red_gain_slider = LabeledSlider("Red Gain",
+                                             0.0, 2.0, 1.0, 1000,
+                                             "#ff0000")
+        self.green_gain_slider = LabeledSlider("Green Gain",
+                                               0.0, 2.0, 1.0, 1000,
+                                               "#00ff00")
+        self.blue_gain_slider = LabeledSlider("Blue Gain",
+                                              0.0, 2.0, 1.0, 1000,
+                                              "#0000ff")
+        self.grading_gain_layout.addWidget(self.red_gain_slider)
+        self.grading_gain_layout.addWidget(self.green_gain_slider)
+        self.grading_gain_layout.addWidget(self.blue_gain_slider)
+        self.grading_tune_layout = QHBoxLayout()
+        self.red_tune_slider = LabeledSlider("Red Tune",
+                                             -1.0, 1.0, 0.0, 1000,
+                                             "#ffeeee")
+        self.green_tune_slider = LabeledSlider("Green Tune",
+                                               -1.0, 1.0, 0.0, 1000,
+                                               "#eeffee")
+        self.blue_tune_slider = LabeledSlider("Blue Tune",
+                                              -1.0, 1.0, 0.0, 1000,
+                                              "#eeeeff")
+        self.grading_tune_layout.addWidget(self.red_tune_slider)
+        self.grading_tune_layout.addWidget(self.green_tune_slider)
+        self.grading_tune_layout.addWidget(self.blue_tune_slider)
+        self.grading_wb_picker = ColorPicker("White Balance Point")
+        self.custom_grading_layout.addLayout(self.grading_gain_layout)
+        self.custom_grading_layout.addLayout(self.grading_tune_layout)
+        self.custom_grading_layout.addWidget(self.grading_wb_picker)
+        self.custom_grading_groupbox.setLayout(self.custom_grading_layout)
         #--- add all layouts
-        self.layout.addWidget(self.pre_inv_wb_picker)
-        self.layout.addWidget(self.inversion_tools_header)
-        self.layout.addLayout(self.inversion_layout)
+        self.layout.addWidget(self.pre_inversion_groupbox)
+        self.layout.addWidget(self.inversion_groupbox)
+        self.layout.addWidget(self.custom_grading_groupbox)
         self.setLayout(self.layout)
 
 
@@ -149,6 +193,7 @@ class EditingDisplay(QWidget):
         # this is super weird and fragile with many edge cases
         # maybe instead: enable pick mode with signal, but track active picker
         #                by letting picker pass reference to itself with signal?
+        #                could `self.sender` be a solution?
         # allow pickers to trigger picker mode
         self.tool_panel.pre_inv_wb_picker.pickRequested.connect(self.image_preview.view.enable_pick_mode)
         self.tool_panel.lo_neutral_picker.pickRequested.connect(self.image_preview.view.enable_pick_mode)
@@ -244,6 +289,11 @@ class MainWindow(QMainWindow):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    # load custom QSS stylesheet
+    with open("inverter/styles.qss", "r") as qss:
+        _styles = qss.read()
+        app.setStyleSheet(_styles)
+    # set a global palette (should do this in stylesheet? enh)
     palette = QPalette(QColor(4,   4,   4  ),  # windowText
                        QColor(128, 128, 128),  # window
                        QColor(222, 222, 222),  # light
