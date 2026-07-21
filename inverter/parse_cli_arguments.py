@@ -98,4 +98,10 @@ def parse_user_arguments():
     parser.add_argument('--bw',
                         action='store_true',
                         help="Save final image in black and white.")
+    parser.add_argument('--ffc',
+                        type=str, default=None,
+                        help="Specify an image to use for flat-field correction.")
+    parser.add_argument('--ffc-strength',
+                        type=float, default=1.0,
+                        help="Strength of flat-field correction.")
     return parser.parse_args()

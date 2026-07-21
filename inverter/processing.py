@@ -87,6 +87,18 @@ def apply_power(image_data, adjustment: tuple[float, float, float]):
     return np.stack([red_new, green_new, blue_new], axis=2)
 
 
+def divide_by_image(a_data: np.ndarray, b_data: np.ndarray):
+    """
+    Divide one array of image data by another.
+    Used for flat-field correction.
+    """
+    result = np.zeros_like(a_data, dtype=float)
+    np.divide(a_data, b_data,
+              out=result,
+              where=(b_data != 0))
+    return result
+
+
 def average_sample_point(image_data, sample_x, sample_y, kernel):
     """
     Average a box around a given sample point and return the value

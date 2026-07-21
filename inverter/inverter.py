@@ -10,9 +10,15 @@ from colour_management import (convert_to_sRGB, ocio_load_and_create_config,
                                ocio_convert_colorspace)
 from processing import (load_raw_image, save_image,
                         invert_to_density, density_to_luminance,
-                        shift_blacks, white_balance, density_balance,
+                        white_balance, density_balance, divide_by_image,
                         apply_gain, apply_addition, normalize_image,
-                        convert_to_grayscale_from_g, process_all_adjustments)
+                        convert_to_grayscale_from_g, convert_to_grayscale,
+                        process_all_adjustments)
+
+
+# globally referencable vars
+# use reference rec2020 luminance weights
+REC202_LUM_WEIGHTS = np.array([0.2627, 0.6780, 0.05903])
 
 
 def process_negative(source_image, args):
@@ -24,23 +30,6 @@ def process_negative(source_image, args):
     primarily from the options exposed in the command-line interface.
     So long as a dictionary of the appropriate values are provided, the args
     do not need to come from the CLI itself.
-
-    A full list of applicable options is as follows:
-        - `image_path`
-        - `blur`
-        - `preset`
-        - `generate_preset`
-        - `analysis_inset`
-        - `exposure_comp`
-        - `skip_inversion`
-        - `skip_auto_adjustments`
-        - `debug_analysis_region`
-        - `red_ratio`
-        - `blue_ratio`
-        - `red_gain`
-        - `green_gain`
-        - `blue_gain`
-        - `wb_point`
 
     See `parse_cli_arguments.py` for more detailed information about each of
     the individual arguments available in the `args` dictionary.
@@ -67,8 +56,6 @@ def process_negative(source_image, args):
                                                                       args.blur,
                                                                       0))
 
-    # use reference rec2020 luminance weights
-    rec2020_lum_weights = np.array([0.2627, 0.6780, 0.05903])
     # store adjustments in array for application and export
     adjustments = []
     # determine and build analysis region
@@ -86,7 +73,7 @@ def process_negative(source_image, args):
     # perform pre-inversion white balance
     if not args.skip_auto_adjustments:
         new_adjustment = white_balance(working_image, analysis_bounding_box,
-                                       rec2020_lum_weights, args.wb_point,
+                                       REC202_LUM_WEIGHTS, args.wb_point,
                                        mode='mult')
         working_image = apply_gain(working_image, new_adjustment["values"])
         adjustments.append(new_adjustment.copy())
@@ -111,7 +98,7 @@ def process_negative(source_image, args):
             adjustments.append(shift_adjustment.copy())
             # readjust white balance
             new_adjustment = white_balance(working_image, analysis_bounding_box,
-                                           rec2020_lum_weights, args.wb_point,
+                                           REC202_LUM_WEIGHTS, args.wb_point,
                                            mode='add')
             working_image = apply_addition(working_image, new_adjustment["values"])
             adjustments.append(new_adjustment.copy())
@@ -139,7 +126,7 @@ def process_negative(source_image, args):
     # normalize image back into 0-1 range to prevent clipping
     if args.normalize:
         print("INFO: Normalizing final output.")
-        new_adjustment = normalize_image(working_image, rec2020_lum_weights,
+        new_adjustment = normalize_image(working_image, REC202_LUM_WEIGHTS,
                                          args.analysis_inset)
         adjustments.append(new_adjustment.copy())
     # apply exposure compensation
@@ -170,6 +157,18 @@ def main():
 
     # process negatives
     source_image = load_raw_image(args.image_path).astype(np.float32) / 65535.0
+    # apply flat-field correction
+    if args.ffc:
+        print(f"Applying flat-field correction (strength {args.ffc_strength})",
+              file=sys.stderr)
+        ffc_image = load_raw_image(args.ffc).astype(np.float32) / 65535.0
+        ffc_luminance = convert_to_grayscale(ffc_image,
+                                             REC202_LUM_WEIGHTS)
+        mean_brightness = np.mean(ffc_luminance)
+        source_image = divide_by_image(source_image,
+                                        ffc_image * args.ffc_strength)
+        # apply gain correction
+        source_image = source_image * mean_brightness
     adjustments = []
     if args.preset:
         adjustments = load_preset(args.preset)
