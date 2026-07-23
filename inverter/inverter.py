@@ -14,11 +14,7 @@ from processing import (load_raw_image, save_image,
                         apply_gain, apply_addition, normalize_image,
                         convert_to_grayscale_from_g, convert_to_grayscale,
                         process_all_adjustments)
-
-
-# globally referencable vars
-# use reference rec2020 luminance weights
-REC202_LUM_WEIGHTS = np.array([0.2627, 0.6780, 0.05903])
+from global_vars import REC2020_WEIGHTS
 
 
 def process_negative(source_image, args):
@@ -73,7 +69,7 @@ def process_negative(source_image, args):
     # perform pre-inversion white balance
     if not args.skip_auto_adjustments:
         new_adjustment = white_balance(working_image, analysis_bounding_box,
-                                       REC202_LUM_WEIGHTS, args.wb_point,
+                                       REC2020_WEIGHTS, args.wb_point,
                                        mode='mult')
         working_image = apply_gain(working_image, new_adjustment["values"])
         adjustments.append(new_adjustment.copy())
@@ -98,7 +94,7 @@ def process_negative(source_image, args):
             adjustments.append(shift_adjustment.copy())
             # readjust white balance
             new_adjustment = white_balance(working_image, analysis_bounding_box,
-                                           REC202_LUM_WEIGHTS, args.wb_point,
+                                           REC2020_WEIGHTS, args.wb_point,
                                            mode='add')
             working_image = apply_addition(working_image, new_adjustment["values"])
             adjustments.append(new_adjustment.copy())
@@ -126,7 +122,8 @@ def process_negative(source_image, args):
     # normalize image back into 0-1 range to prevent clipping
     if args.normalize:
         print("INFO: Normalizing final output.")
-        new_adjustment = normalize_image(working_image, REC202_LUM_WEIGHTS,
+        new_adjustment = normalize_image(working_image,
+                                         REC2020_WEIGHTS,
                                          args.analysis_inset)
         adjustments.append(new_adjustment.copy())
     # apply exposure compensation
@@ -163,7 +160,7 @@ def main():
               file=sys.stderr)
         ffc_image = load_raw_image(args.ffc).astype(np.float32) / 65535.0
         ffc_luminance = convert_to_grayscale(ffc_image,
-                                             REC202_LUM_WEIGHTS)
+                                             REC2020_WEIGHTS)
         mean_brightness = np.mean(ffc_luminance)
         source_image = divide_by_image(source_image,
                                         ffc_image * args.ffc_strength)

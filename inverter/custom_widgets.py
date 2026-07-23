@@ -106,7 +106,8 @@ class Scrubber(QWidget):
         self._default = value
         self._last_mouse_x = None
         # used to slightly delay position updates to allow mouse to fully move
-        self._timer = QTimer(self)
+        self._mousewarp_timer = QTimer(self)
+        self._mousewarp_timer.setSingleShot(True)
         # color values
         self._fill_color = fill
         self._background_color = bg
@@ -127,6 +128,9 @@ class Scrubber(QWidget):
     def set_last_mouse_x(self, x):
         self._last_mouse_x = x
 
+    def _emit_value(self):
+        self.valueChanged.emit(self._value)
+
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
             # hide and teleport mouse to center of widget
@@ -138,8 +142,8 @@ class Scrubber(QWidget):
                 global_center = self.mapToGlobal(local_center)
                 QCursor.setPos(global_center)
                 QApplication.processEvents()
-                self._timer.timeout.connect(lambda: self.set_last_mouse_x(global_center.x()))
-                self._timer.start(1)
+                self._mousewarp_timer.timeout.connect(lambda: self.set_last_mouse_x(global_center.x()))
+                self._mousewarp_timer.start(1)
             else:
                 self.set_last_mouse_x(event.globalPosition().x())
         elif event.button() == Qt.MouseButton.RightButton:
@@ -156,8 +160,8 @@ class Scrubber(QWidget):
                 global_center = self.mapToGlobal(local_center)
                 QCursor.setPos(global_center)
                 x_pos = event.globalPosition().x()
-                self._timer.timeout.connect(lambda: self.set_last_mouse_x(x_pos))
-                self._timer.start(50)
+                self._mousewarp_timer.timeout.connect(lambda: self.set_last_mouse_x(x_pos))
+                self._mousewarp_timer.start(50)
             else:
                 self.set_last_mouse_x(event.globalPosition().x())
 
@@ -194,8 +198,8 @@ class Scrubber(QWidget):
         self.setCursor(Qt.CursorShape.SizeHorCursor)
         # delay also required here, to avoid overwrite from move event
         if GLOBAL_FLAGS['platform'] != 'wayland':
-            self._timer.timeout.connect(lambda: self.set_last_mouse_x(None))
-            self._timer.start(1)
+            self._mousewarp_timer.timeout.connect(lambda: self.set_last_mouse_x(None))
+            self._mousewarp_timer.start(1)
         else:
             self.set_last_mouse_x(None)
 
@@ -226,9 +230,15 @@ class LabeledSlider(QWidget):
 
     def __init__(self, label,
                  minimum, maximum, value, precision=100,
-                 fill="#C0C0C0", bg="#404040", parent=None):
+                 fill="#C0C0C0", bg="#404040",
+                 emit_delay=500, parent=None):
         super().__init__(parent)
         self.precision = precision
+        self._emit_delay = emit_delay
+        self._signal_timer = QTimer(self)
+        self._signal_timer.setSingleShot(True)
+        self._signal_timer.setInterval(self._emit_delay)
+        self._signal_timer.timeout.connect(self._emit_value)
 
         layout = QVBoxLayout()
         layout.setContentsMargins(0, 0, 0, 8)
@@ -251,6 +261,9 @@ class LabeledSlider(QWidget):
         layout.addWidget(self.slider)
         self.setLayout(layout)
 
+    def _emit_value(self):
+        self.valueChanged.emit(self.value())
+
     def _on_right_click(self):
         current_float = self.value()
         min_float = self.get_min_value()
@@ -265,7 +278,8 @@ class LabeledSlider(QWidget):
     def _on_slider_changed(self, raw_value):
         value = raw_value / self.precision
         self.readout.setText(f"{value:.2f}")
-        self.valueChanged.emit(value)
+        # self.valueChanged.emit(value)
+        self._signal_timer.start()
 
     def value(self):
         return self.slider.value() / self.precision

@@ -1,62 +1,33 @@
 import sys
 import numpy as np
-from PySide6.QtCore import Qt, Slot, QThreadPool
+from PySide6.QtCore import Qt, Slot
 from PySide6.QtGui import QImage, QPixmap, QPalette, QColor
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget,
                                QVBoxLayout, QHBoxLayout,
                                QLabel, QPushButton, QFileDialog,
-                               QGraphicsScene, QMessageBox, QSplitter,
-                               QCheckBox, QGroupBox, QScrollArea,
-                               QSizePolicy)
-from scipy import ndimage
-from threads import Worker
+                               QGraphicsScene, QSplitter,
+                               QCheckBox, QGroupBox, QScrollArea)
 from custom_widgets import ImageView, LabeledSlider, ColorPicker
-from inverter import load_raw_image, process_negative
 from colour_management import convert_to_sRGB
-from processing import process_all_adjustments
 from edit_params import EditParams
 from pipeline import ProcessingPipeline
 from global_vars import GLOBAL_FLAGS
 
 
 # some global variables for tracking information about the current session
-MAX_PREVIEW_SIZE = 1280
 LOADED_RAW_PATH = None
 CURRENT_IMAGE_SOURCE_DATA = []
-PIPELINE: ProcessingPipeline = None
+PIPELINE: ProcessingPipeline = ProcessingPipeline()
 
 
-#--- create a thread pool for offloading image processing
-# here be dragons (should really be a custom class in threads.py)
-THREADPOOL = QThreadPool()
-THREAD_COUNT = THREADPOOL.maxThreadCount()
-print(f"Multithreading active with {THREAD_COUNT} threads.",
-      file=sys.stderr)
-# hold threads to prevent garbage collection
-# and initialize a thread_id iterator
-ACTIVE_THREADS = {}
-THREAD_ID = 0
-
-
-def instantiate_thread(func, *args, **kwargs):
-    global THREAD_ID
-    THREAD_ID += 1
-    thread = Worker(func, thread_id=THREAD_ID)
-    return thread
-
-
-def remove_thread(thread_id):
-    global ACTIVE_THREADS
-    ACTIVE_THREADS[thread_id] = None
-
-
-#--- UI Definitions
+# --- UI Definitions
 # derive from QWidget to create a custom updateable image class
 class PrimaryImageView(QWidget):
     def __init__(self, parent=None):
         global PIPELINE
         super(PrimaryImageView, self).__init__(parent)
         self.setMinimumSize(300, 200)
+        PIPELINE.previewUpdated.connect(self.update_image)
 
         # configure QGraphicsScene and ImageView
         self.layout = QHBoxLayout()
@@ -68,7 +39,6 @@ class PrimaryImageView(QWidget):
         self.preview_pixmap.setPos(0, 0)
         self.layout.addWidget(self.view)
         self.setLayout(self.layout)
-
 
     @Slot()
     def update_image(self, center=False):
@@ -102,10 +72,10 @@ class ToolPanel(QWidget):
         self.setMinimumWidth(300)
         # track all the active tools
         self.tools = []
-        #--- top-level tools layout
+        # --- top-level tools layout
         self.layout = QVBoxLayout()
         self.layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        #--- pre-inversion layout (orientation and initial white balance)
+        # --- pre-inversion layout (orientation and initial white balance)
         pre_inversion_groupbox = QGroupBox("Pre-Inversion")
         pre_inversion_layout = QVBoxLayout()
         self.pre_inv_orientation_layout = QHBoxLayout()
@@ -120,7 +90,7 @@ class ToolPanel(QWidget):
         self.tools.extend([self.pre_inv_rotate_left,
                            self.pre_inv_rotate_right,
                            self.pre_inv_wb_picker])
-        #--- inversion tools layout
+        # --- inversion tools layout
         inversion_groupbox = QGroupBox("Inversion")
         inversion_layout = QVBoxLayout()
         checkbox_layout = QHBoxLayout()
@@ -156,7 +126,7 @@ class ToolPanel(QWidget):
                            self.contrast_slider,
                            self.lo_gray_picker,
                            self.hi_gray_picker])
-        #--- user grading
+        # --- user grading
         custom_grading_groupbox = QGroupBox("Grading")
         custom_grading_layout = QVBoxLayout()
         grading_gain_layout = QHBoxLayout()
@@ -202,7 +172,7 @@ class ToolPanel(QWidget):
                            self.blue_tune_slider,
                            self.grading_wb_picker,
                            self.exposure_slider])
-        #--- add all layouts
+        # --- add all layouts
         self.layout.addWidget(pre_inversion_groupbox)
         self.layout.addWidget(inversion_groupbox)
         self.layout.addWidget(custom_grading_groupbox)
@@ -217,7 +187,6 @@ class EditingDisplay(QWidget):
 
         # image preview / canvas
         self.image_preview = PrimaryImageView(self)
-        self.preview_scale = 1.0
 
         # controls
         # demo controls
@@ -252,8 +221,8 @@ class EditingDisplay(QWidget):
         # include some quick shorthand variables for readability
         tp = self.tool_panel
         ip = self.image_preview
-        ep = self.edit_params
-        self.load_button.clicked.connect(self.load_raw_file)
+        # ep = self.edit_params
+        self.load_button.clicked.connect(self.open_load_dialog)
         tp.pre_inv_rotate_left.clicked.connect(lambda: self.update_rotation(1))
         tp.pre_inv_rotate_right.clicked.connect(lambda: self.update_rotation(-1))
         # this is super weird and fragile with many edge cases
@@ -283,7 +252,6 @@ class EditingDisplay(QWidget):
         if PIPELINE:
             PIPELINE.process_image(ep.copy())
 
-
     def update_edit_params(self):
         global PIPELINE
         ep = self.edit_params
@@ -306,56 +274,12 @@ class EditingDisplay(QWidget):
         ep.exposure_comp = tp.exposure_slider.value()
         if PIPELINE:
             PIPELINE.process_image(ep.copy())
-        
 
-    def load_raw_file(self):
-        # load raw image and resize it for the preview pane
-        image_path, discard_text = QFileDialog.getOpenFileName()
-        if image_path:
-            global THREADPOOL
-            global ACTIVE_THREADS
-            global LOADED_RAW_PATH
-            LOADED_RAW_PATH = image_path
-            # disable button while we load the new image
-            self.load_button.setEnabled(False)
-            self.current_file_label.setText("Loading your image...")
-            # the function to be executed within a separate thread
-            def init_func():
-                raw = load_raw_image(image_path).astype(np.float32) / 65535.0
-                height, width, _ = raw.shape
-                # preview size maxes out at 1920 for easier processing
-                self.preview_scale = MAX_PREVIEW_SIZE / width
-                raw = ndimage.zoom(raw, (self.preview_scale,
-                                         self.preview_scale, 1), order=0)
-                return raw
-            # the function to be executed upon thread completion
-            def post_func(image_data):
-                global CURRENT_IMAGE_SOURCE_DATA
-                global PIPELINE
-                CURRENT_IMAGE_SOURCE_DATA = image_data
-                PIPELINE = ProcessingPipeline(image_data,
-                                              scale=self.preview_scale)
-                # connect pipeline alerts to update_image pipeline
-                PIPELINE.previewUpdated.connect(self.image_preview.update_image)
-                self.edit_params = EditParams()
-                self.image_preview.update_image(center=True)
-                self.current_file_label.setText(LOADED_RAW_PATH)
-                self.load_button.setEnabled(True)
-            def error_func(e):
-                exctype, value, error = e
-                # tell user there's an issue
-                QMessageBox.critical(self, "Error processing image!", error)
-                # and re-enable the buttons
-                self.current_file_label.setText("NO FILE LOADED")
-                self.load_button.setEnabled(True)
-            # instantiate and run a thread
-            # should split this out into its own function, surely
-            thread = instantiate_thread(init_func)
-            ACTIVE_THREADS[thread.thread_id] = thread
-            thread.signals.result.connect(post_func)
-            thread.signals.error.connect(error_func)
-            thread.signals.finished.connect(remove_thread)
-            THREADPOOL.start(thread)
+    def open_load_dialog(self):
+        global PIPELINE, LOADED_RAW_PATH
+        image_path, _ = QFileDialog.getOpenFileName()
+        PIPELINE.load_raw_file(image_path)
+        LOADED_RAW_PATH = image_path
 
 
 class MainWindow(QMainWindow):
