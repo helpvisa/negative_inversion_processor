@@ -31,6 +31,7 @@ class ProcessingPipeline(QObject):
         self.threadpool = WorkerThreadPool()
         self.edit_params = EditParams()
         self.analysis_inset = analysis_inset
+        # this value should also be updated in pre_inv_process
         self.auto_analysis_bounds = None
         self.source_image = None
         self.source_image_small = None
@@ -103,14 +104,23 @@ class ProcessingPipeline(QObject):
         ep = self.edit_params
 
         def current():
-            if not ep.skip_inversion and not ep.bw_mode:
-                scale, shift = density_balance(self.inv_inter,
-                                               region=self.auto_analysis_bounds,
-                                               exponent=ep.green_exponent,
-                                               red_ratio=ep.red_ratio,
-                                               blue_ratio=ep.blue_ratio)
-                self.ratio_inter = apply_gain(self.inv_inter, scale['values'])
-                self.ratio_inter = apply_addition(self.ratio_inter, shift['values'])
+            if not ep.skip_inversion:
+                if not ep.bw_mode:
+                    scale, shift = density_balance(self.inv_inter,
+                                                   region=self.auto_analysis_bounds,
+                                                   exponent=ep.green_exponent,
+                                                   red_ratio=ep.red_ratio,
+                                                   blue_ratio=ep.blue_ratio)
+                    self.ratio_inter = apply_gain(self.inv_inter, scale['values'])
+                    self.ratio_inter = apply_addition(self.ratio_inter, shift['values'])
+                else:
+                    scale, shift = density_balance(self.inv_inter,
+                                                   region=self.auto_analysis_bounds,
+                                                   exponent=ep.green_exponent,
+                                                   red_ratio=1.0,
+                                                   blue_ratio=1.0)
+                    self.ratio_inter = apply_gain(self.inv_inter, scale['values'])
+                    self.ratio_inter = apply_addition(self.ratio_inter, shift['values'])
             else:
                 self.ratio_inter = self.inv_inter.copy()
 

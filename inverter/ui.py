@@ -48,9 +48,12 @@ class PrimaryImageView(QWidget):
         """
         global PIPELINE
         preview_image = PIPELINE.final_preview.copy()
+        print(preview_image.ndim, file=sys.stderr)
         if preview_image.ndim < 3:
-            preview_image = preview_image.repeat(3, axis=-1)
-        display_image, sRGB_profile = convert_to_sRGB(PIPELINE.final_preview)
+            preview_image = np.stack((preview_image,
+                                      preview_image,
+                                      preview_image), axis=-1)
+        display_image, _ = convert_to_sRGB(preview_image)
         display_image = np.clip(display_image, a_min=0, a_max=1)
         q_image = QImage(np.multiply(display_image, 255).astype(np.uint8),
                          display_image.shape[1],
