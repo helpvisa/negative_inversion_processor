@@ -6,7 +6,8 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget,
                                QVBoxLayout, QHBoxLayout,
                                QLabel, QPushButton, QFileDialog,
                                QGraphicsScene, QMessageBox, QSplitter,
-                               QCheckBox, QGroupBox)
+                               QCheckBox, QGroupBox, QScrollArea,
+                               QSizePolicy)
 from scipy import ndimage
 from threads import Worker
 from custom_widgets import ImageView, LabeledSlider, ColorPicker
@@ -55,7 +56,7 @@ class PrimaryImageView(QWidget):
     def __init__(self, parent=None):
         global PIPELINE
         super(PrimaryImageView, self).__init__(parent)
-        self.setMinimumSize(600, 400)
+        self.setMinimumSize(300, 200)
 
         # configure QGraphicsScene and ImageView
         self.layout = QHBoxLayout()
@@ -98,6 +99,7 @@ class PrimaryImageView(QWidget):
 class ToolPanel(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.setMinimumWidth(300)
         # track all the active tools
         self.tools = []
         #--- top-level tools layout
@@ -158,26 +160,26 @@ class ToolPanel(QWidget):
         custom_grading_groupbox = QGroupBox("Grading")
         custom_grading_layout = QVBoxLayout()
         grading_gain_layout = QHBoxLayout()
-        self.red_gain_slider = LabeledSlider("Red Gain",
+        self.red_gain_slider = LabeledSlider("R Mult",
                                              0.0, 2.0, 1.0, 1000,
                                              "#ff0000")
-        self.green_gain_slider = LabeledSlider("Green Gain",
+        self.green_gain_slider = LabeledSlider("G Mult",
                                                0.0, 2.0, 1.0, 1000,
                                                "#00ff00")
-        self.blue_gain_slider = LabeledSlider("Blue Gain",
+        self.blue_gain_slider = LabeledSlider("B Mult",
                                               0.0, 2.0, 1.0, 1000,
                                               "#0000ff")
         grading_gain_layout.addWidget(self.red_gain_slider)
         grading_gain_layout.addWidget(self.green_gain_slider)
         grading_gain_layout.addWidget(self.blue_gain_slider)
         grading_tune_layout = QHBoxLayout()
-        self.red_tune_slider = LabeledSlider("Red Tune",
+        self.red_tune_slider = LabeledSlider("R Add",
                                              -1.0, 1.0, 0.0, 1000,
                                              "#ffeeee")
-        self.green_tune_slider = LabeledSlider("Green Tune",
+        self.green_tune_slider = LabeledSlider("G Add",
                                                -1.0, 1.0, 0.0, 1000,
                                                "#eeffee")
-        self.blue_tune_slider = LabeledSlider("Blue Tune",
+        self.blue_tune_slider = LabeledSlider("B Add",
                                               -1.0, 1.0, 0.0, 1000,
                                               "#eeeeff")
         grading_tune_layout.addWidget(self.red_tune_slider)
@@ -222,7 +224,12 @@ class EditingDisplay(QWidget):
         self.current_file_label = QLabel("NO FILE LOADED")
         self.load_button = QPushButton("Load Image")
         # actual side panel
+        self.scrollable_sidebar = QScrollArea()
+        self.scrollable_sidebar.setWidgetResizable(True)
+        self.scrollable_sidebar.setMinimumWidth(350)
+        self.scrollable_sidebar.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.tool_panel = ToolPanel()
+        self.scrollable_sidebar.setWidget(self.tool_panel)
 
         # define layouts
         # top-level layout
@@ -235,7 +242,7 @@ class EditingDisplay(QWidget):
         self.editing_layout = QSplitter(Qt.Horizontal)
         self.editing_layout.setHandleWidth(16)
         self.editing_layout.addWidget(self.image_preview)
-        self.editing_layout.addWidget(self.tool_panel)
+        self.editing_layout.addWidget(self.scrollable_sidebar)
         # add all layouts and wrap it all up
         self.layout.addLayout(self.load_layout)
         self.layout.addWidget(self.editing_layout)
@@ -357,7 +364,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Negative Inversion Processor")
         self.editing_display = EditingDisplay()
         self.setCentralWidget(self.editing_display)
-        self.resize(1400, 600)
+        self.resize(1200, 600)
 
 
 if __name__ == "__main__":
