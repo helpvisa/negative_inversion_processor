@@ -186,9 +186,11 @@ class ToolPanel(QWidget):
 
 class EditingDisplay(QWidget):
     def __init__(self, parent=None):
+        global PIPELINE
         super().__init__(parent)
         # internal tracking vars
         self.edit_params = EditParams()
+        PIPELINE.editParamsReset.connect(self.reset_edit_params)
 
         # image preview / canvas
         self.image_preview = PrimaryImageView(self)
@@ -280,6 +282,28 @@ class EditingDisplay(QWidget):
         ep.tonemap = tp.tonemap_checkbox.isChecked()
         if PIPELINE:
             PIPELINE.process_image(ep.copy())
+
+    def reset_edit_params(self):
+        self.edit_params = PIPELINE.edit_params.copy()
+        ep = self.edit_params
+        tp = self.tool_panel
+        tp.skip_inversion_checkbox.setChecked(ep.skip_inversion)
+        tp.bw_checkbox.setChecked(ep.bw_mode)
+        tp.pre_inv_wb_picker.finish_pick(None, None)
+        tp.red_ratio_slider.setValue(ep.red_ratio)
+        tp.blue_ratio_slider.setValue(ep.blue_ratio)
+        tp.contrast_slider.setValue(ep.green_exponent)
+        tp.lo_gray_picker.finish_pick(None, None)
+        tp.hi_gray_picker.finish_pick(None, None)
+        tp.red_gain_slider.setValue(ep.red_gain)
+        tp.green_gain_slider.setValue(ep.green_gain)
+        tp.blue_gain_slider.setValue(ep.blue_gain)
+        tp.grading_wb_picker.finish_pick(None, None)
+        tp.red_tune_slider.setValue(ep.wb_red)
+        tp.green_tune_slider.setValue(ep.wb_green)
+        tp.blue_tune_slider.setValue(ep.wb_blue)
+        tp.exposure_slider.setValue(ep.exposure_comp)
+        tp.tonemap_checkbox.setChecked(ep.tonemap)
 
     def open_load_dialog(self):
         global PIPELINE, LOADED_RAW_PATH

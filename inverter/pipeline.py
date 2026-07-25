@@ -19,13 +19,14 @@ from processing import (load_raw_image, rotate_image,
                         invert_to_density, density_to_luminance,
                         convert_to_grayscale_from_g,
                         apply_addition, apply_gain)
-from colour_management import reinhard_tonemap
+from colour_management import reinhard_tonemap, aces_tonemap
 from global_vars import REC2020_WEIGHTS
 
 
 # we must subclass QObject to leverage signals
 class ProcessingPipeline(QObject):
     previewUpdated = Signal()
+    editParamsReset = Signal()
 
     def __init__(self, max_preview_size=1280, analysis_inset=0.8):
         super().__init__()
@@ -177,11 +178,8 @@ class ProcessingPipeline(QObject):
         self.threadpool.start(thread)
 
     def tonemap_process(self):
-        ep = self.edit_params
-
         def current():
-            self.final_preview = reinhard_tonemap(self.final_preview,
-                                                  ep.exposure_comp)
+            self.final_preview = aces_tonemap(self.final_preview)
 
         def proceed():
             self.previewUpdated.emit()
@@ -212,6 +210,7 @@ class ProcessingPipeline(QObject):
                 self.source_image = image_data_tuple[0]
                 self.source_image_small = image_data_tuple[1]
                 self.edit_params = EditParams()
+                self.editParamsReset.emit()
                 self.pre_inv_process()
 
             def error_func(e):
