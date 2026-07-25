@@ -1,6 +1,24 @@
+import numpy as np
 import PyOpenColorIO as ocio
 from colour import RGB_to_XYZ, XYZ_to_RGB, RGB_COLOURSPACES, CCS_ILLUMINANTS
 from PIL import ImageCms
+from processing import convert_to_grayscale
+from global_vars import REC2020_WEIGHTS
+
+
+def reinhard_tonemap(image_data, key=1.0):
+    """
+    Basic tonemapping from HDR to 0.0 - 1.0.
+    Key value represents reference luminance (in most cases, middle gray)
+    """
+    lum = convert_to_grayscale(image_data, REC2020_WEIGHTS)
+    log_lum = np.log(lum + 1e-8)
+    log_mean = np.mean(log_lum)
+    log_avg_lum = np.exp(log_mean)
+    scaled_lum = lum * (key / log_avg_lum)
+    compressed_lum = scaled_lum / (1 + scaled_lum)
+    final_scale = compressed_lum / (lum + 1e-8)
+    return image_data * final_scale[:, :, np.newaxis]
 
 
 def convert_to_sRGB(image_data):

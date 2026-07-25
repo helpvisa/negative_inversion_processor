@@ -19,6 +19,7 @@ from processing import (load_raw_image, rotate_image,
                         invert_to_density, density_to_luminance,
                         convert_to_grayscale_from_g,
                         apply_addition, apply_gain)
+from colour_management import reinhard_tonemap
 from global_vars import REC2020_WEIGHTS
 
 
@@ -31,7 +32,8 @@ class ProcessingPipeline(QObject):
         self.threadpool = WorkerThreadPool()
         self.edit_params = EditParams()
         self.analysis_inset = analysis_inset
-        # this value should also be updated in pre_inv_process
+        self.raw_width = 0
+        self.raw_height = 0
         self.auto_analysis_bounds = None
         self.source_image = None
         self.source_image_small = None
@@ -62,6 +64,12 @@ class ProcessingPipeline(QObject):
         def current():
             self.pre_inv_inter = rotate_image(self.source_image_small,
                                               ep.rotation)
+            # shift analysis bounds based on image rotation
+            if ep.rotation % 2:
+                # swizzle
+                self.update_analysis_bounds(self.raw_height, self.raw_width)
+            else:
+                self.update_analysis_bounds()
             if ep.base_color_xy:
                 wb_adjustment = white_balance(self.pre_inv_inter,
                                               custom_wb_point=ep.base_color_xy)
@@ -155,10 +163,32 @@ class ProcessingPipeline(QObject):
             self.final_preview = self.grade_inter.copy()
             if ep.bw_mode:
                 self.final_preview = convert_to_grayscale_from_g(self.final_preview)
+
+        def proceed():
+            if ep.tonemap:
+                self.tonemap_process()
+            else:
+                self.previewUpdated.emit()
+
+        thread = self.threadpool.instantiate_thread(current)
+        self.threadpool.active_threads[thread.thread_id] = thread
+        thread.signals.result.connect(proceed)
+        thread.signals.finished.connect(self.threadpool.remove_thread)
+        self.threadpool.start(thread)
+
+    def tonemap_process(self):
+        ep = self.edit_params
+
+        def current():
+            self.final_preview = reinhard_tonemap(self.final_preview,
+                                                  ep.exposure_comp)
+
+        def proceed():
             self.previewUpdated.emit()
 
         thread = self.threadpool.instantiate_thread(current)
         self.threadpool.active_threads[thread.thread_id] = thread
+        thread.signals.result.connect(proceed)
         thread.signals.finished.connect(self.threadpool.remove_thread)
         self.threadpool.start(thread)
 
@@ -169,19 +199,12 @@ class ProcessingPipeline(QObject):
             def init_func():
                 raw = load_raw_image(image_path).astype(np.float32) / 65535.0
                 height, width, _ = raw.shape
-                # preview size maxes out at 1920 for easier processing
+                self.raw_width = width
+                self.raw_height = height
                 self.preview_scale = self.max_preview_size / width
+                self.update_analysis_bounds()
                 scaled_raw = ndimage.zoom(raw, (self.preview_scale,
                                                 self.preview_scale, 1), order=0)
-                # determine auto-analysis bounds
-                a_width = int(width * self.analysis_inset * self.preview_scale)
-                a_height = int(height * self.analysis_inset * self.preview_scale)
-                a_start_x = int(width * self.preview_scale - a_width) // 2
-                a_end_x = a_start_x + a_width
-                a_start_y = int(height * self.preview_scale - a_height) // 2
-                a_end_y = a_start_y + a_height
-                self.auto_analysis_bounds = [[a_start_x, a_start_y],
-                                             [a_end_x, a_end_y]]
                 return raw, scaled_raw
 
             # the function to be executed upon thread completion
@@ -204,3 +227,21 @@ class ProcessingPipeline(QObject):
             thread.signals.error.connect(error_func)
             thread.signals.finished.connect(self.threadpool.remove_thread)
             self.threadpool.start(thread)
+
+    def update_analysis_bounds(self,
+                               width=None,
+                               height=None):
+        # replace width/height with self.raw_[w|h] if value not present
+        if not width:
+            width = self.raw_width
+        if not height:
+            height = self.raw_height
+        # determine auto-analysis bounds
+        a_width = int(width * self.analysis_inset * self.preview_scale)
+        a_height = int(height * self.analysis_inset * self.preview_scale)
+        a_start_x = int(width * self.preview_scale - a_width) // 2
+        a_end_x = a_start_x + a_width
+        a_start_y = int(height * self.preview_scale - a_height) // 2
+        a_end_y = a_start_y + a_height
+        self.auto_analysis_bounds = [[a_start_x, a_start_y],
+                                     [a_end_x, a_end_y]]

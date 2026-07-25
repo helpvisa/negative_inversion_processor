@@ -48,7 +48,6 @@ class PrimaryImageView(QWidget):
         """
         global PIPELINE
         preview_image = PIPELINE.final_preview.copy()
-        print(preview_image.ndim, file=sys.stderr)
         if preview_image.ndim < 3:
             preview_image = np.stack((preview_image,
                                       preview_image,
@@ -162,10 +161,12 @@ class ToolPanel(QWidget):
                                              hide_value=True)
         self.exposure_slider = LabeledSlider("Exposure Compensation",
                                              0.0, 10.0, 1.0, 1000)
+        self.tonemap_checkbox = QCheckBox("Apply Tonemapping")
         custom_grading_layout.addLayout(grading_gain_layout)
         custom_grading_layout.addLayout(grading_tune_layout)
         custom_grading_layout.addWidget(self.grading_wb_picker)
         custom_grading_layout.addWidget(self.exposure_slider)
+        custom_grading_layout.addWidget(self.tonemap_checkbox)
         custom_grading_groupbox.setLayout(custom_grading_layout)
         self.tools.extend([self.red_gain_slider,
                            self.green_gain_slider,
@@ -174,7 +175,8 @@ class ToolPanel(QWidget):
                            self.green_tune_slider,
                            self.blue_tune_slider,
                            self.grading_wb_picker,
-                           self.exposure_slider])
+                           self.exposure_slider,
+                           self.tonemap_checkbox])
         # --- add all layouts
         self.layout.addWidget(pre_inversion_groupbox)
         self.layout.addWidget(inversion_groupbox)
@@ -260,7 +262,7 @@ class EditingDisplay(QWidget):
         ep = self.edit_params
         tp = self.tool_panel
         ep.skip_inversion = tp.skip_inversion_checkbox.isChecked()
-        ep.bw_mode = tp.bw_checkbox.isChecked() 
+        ep.bw_mode = tp.bw_checkbox.isChecked()
         ep.base_color_xy = tp.pre_inv_wb_picker.value()
         ep.red_ratio = tp.red_ratio_slider.value()
         ep.blue_ratio = tp.blue_ratio_slider.value()
@@ -275,6 +277,7 @@ class EditingDisplay(QWidget):
         ep.wb_green = tp.green_tune_slider.value()
         ep.wb_blue = tp.blue_tune_slider.value()
         ep.exposure_comp = tp.exposure_slider.value()
+        ep.tonemap = tp.tonemap_checkbox.isChecked()
         if PIPELINE:
             PIPELINE.process_image(ep.copy())
 

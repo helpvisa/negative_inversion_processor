@@ -9,7 +9,7 @@ class EditParams:
     rotation: int = 0
     crop_inset: float = 100.0
 
-    #--- inversion parameters
+    # --- inversion parameters
     skip_inversion: bool = False
     bw_mode: bool = False
     # xy coord for sampling base colour of film
@@ -22,7 +22,7 @@ class EditParams:
     lo_gray_xy: Optional[Tuple[int, int]] = None
     hi_gray_xy: Optional[Tuple[int, int]] = None
 
-    #--- final user grade
+    # --- final user grade
     red_gain: float = 1.0
     green_gain: float = 1.0
     blue_gain: float = 1.0
@@ -33,6 +33,7 @@ class EditParams:
     wb_green: float = 0.0
     wb_blue: float = 0.0
     exposure_comp: float = 1.0
+    tonemap: bool = False
 
     def copy(self) -> "EditParams":
         """

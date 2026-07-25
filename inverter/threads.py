@@ -36,7 +36,7 @@ class Worker(QRunnable):
         """
         Initialize the function passed in on thread creation, with args.
         """
-        print(f"Thread started: {self.thread_id}", file=sys.stderr)
+        # print(f"Thread started: {self.thread_id}", file=sys.stderr)
         try:
             result = self.function(*self.args, **self.kwargs)
         except Exception:
@@ -47,7 +47,7 @@ class Worker(QRunnable):
             self.signals.result.emit(result)
         finally:
             self.signals.finished.emit(self.thread_id)
-            print(f"Thread ended: {self.thread_id}", file=sys.stderr)
+            # print(f"Thread ended: {self.thread_id}", file=sys.stderr)
 
 
 class WorkerThreadPool(QThreadPool):
