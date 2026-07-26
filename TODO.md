@@ -19,3 +19,8 @@
         3. send signal containing fetched (r, g, b) from processing pipeline
         4. finally, connect above (r, g, b) signal with ColorPicker
         5. result: pipeline-accurate (r, g, b) color, no stale (x, y) values
+- individual file tracking
+    - track EditParams for each image that's been loaded
+        - persist in-memory? sidecar? both?
+    - copy/paste EditParams for easier batching
+        - allow global paste in folder view
