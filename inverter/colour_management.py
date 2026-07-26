@@ -6,14 +6,6 @@ from processing import convert_to_grayscale
 from global_vars import REC2020_WEIGHTS
 
 
-ACES_I_MAT = [[0.59719, 0.35458, 0.04823],
-              [0.07600, 0.90834, 0.01566],
-              [0.02840, 0.13383, 0.83777]]
-ACES_O_MAT = [[ 1.60475, -0.53108, -0.07367],
-              [-0.10208,  1.10813, -0.00605],
-              [-0.00327, -0.07276,  1.07602]]
-
-
 def aces_tonemap(image_data):
     """
     ACES-style tonemapping from HDR to 0.0 <-> 1.0.
@@ -22,12 +14,9 @@ def aces_tonemap(image_data):
     See https://github.com/TheRealMJP/BakingLab/blob/master/BakingLab/ACES.hlsl
     (^ MIT License)
     """
-    global ACES_I_MAT, ACES_O_MAT
-    # aces_in = np.matmul(image_data, ACES_I_MAT)
     a = image_data * (image_data + 0.0245786) - 0.000090537
     b = image_data * (0.983729 * image_data + 0.4329510) + 0.238081
     return a / b
-    # return np.matmul(a / b, ACES_O_MAT)
 
 
 def reinhard_tonemap(image_data, key=1.0):
