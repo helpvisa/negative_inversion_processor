@@ -362,9 +362,10 @@ class ColorPicker(QWidget):
     def update_color(self, color: tuple[float, float, float]):
         if color[0] and color[1] and color[2]:
             self._color = color
-            label_value = np.array_str(color, precision=2)
-            print(f"COLOR UPDATED: {label_value}")
+            label_value = np.round(color, decimals=2)
             self.value_display.setText(f"{label_value}")
             # get final sRGB colour to use for preview
-            # sRGB_color, _ = convert_to_sRGB(color)
+            sRGB_color, _ = convert_to_sRGB(color)
+            color_clipped = np.clip(sRGB_color, max=1.0, min=0.0) * 255
+            self.value_display.setStyleSheet(f"background-color: rgb({color_clipped[0]}, {color_clipped[1]}, {color_clipped[2]});")
             self.colorChanged.emit(color)

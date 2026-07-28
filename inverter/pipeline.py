@@ -45,6 +45,7 @@ class ProcessingPipeline(QObject):
         self.max_preview_size = max_preview_size
         self.preview_scale = 1.0
         # track a median copy for each stage of the pipeline
+        self.rotation_inter = []
         self.pre_inv_inter = []
         self.inv_inter = []
         self.ratio_inter = []
@@ -66,8 +67,8 @@ class ProcessingPipeline(QObject):
         ep = self.edit_params
 
         def current():
-            self.pre_inv_inter = rotate_image(self.source_image_small,
-                                              ep.rotation)
+            self.rotation_inter = rotate_image(self.source_image_small,
+                                               ep.rotation)
             # shift analysis bounds based on image rotation
             if ep.rotation % 2:
                 # swizzle
@@ -75,15 +76,15 @@ class ProcessingPipeline(QObject):
             else:
                 self.update_analysis_bounds()
             if ep.base_color_xy:
-                wb_adjustment = white_balance(self.pre_inv_inter,
+                wb_adjustment = white_balance(self.rotation_inter,
                                               custom_wb_point=ep.base_color_xy)
-                self.pre_inv_inter = apply_gain(self.pre_inv_inter,
+                self.pre_inv_inter = apply_gain(self.rotation_inter,
                                                 wb_adjustment['values'])
             else:
-                wb_adjustment = white_balance(self.pre_inv_inter,
+                wb_adjustment = white_balance(self.rotation_inter,
                                               colourspace_weights=REC2020_WEIGHTS,
                                               region=self.auto_analysis_bounds)
-                self.pre_inv_inter = apply_gain(self.pre_inv_inter,
+                self.pre_inv_inter = apply_gain(self.rotation_inter,
                                                 wb_adjustment['values'])
 
         def proceed():
@@ -255,22 +256,22 @@ class ProcessingPipeline(QObject):
     def pick_color_from_image(self, point_x, point_y,
                               stage: Stage, picker: ColorPicker):
         if stage == Stage.PRE_INV:
-            value = average_sample_point(self.pre_inv_inter,
+            value = average_sample_point(self.rotation_inter,
                                          point_x, point_y, 8)
             picker.update_color(value)
         elif stage == Stage.INV:
-            value = average_sample_point(self.inv_inter,
+            value = average_sample_point(self.pre_inv_inter,
                                          point_x, point_y, 8)
             picker.update_color(value)
         elif stage == Stage.RATIO:
-            value = average_sample_point(self.ratio_inter,
+            value = average_sample_point(self.inv_inter,
                                         point_x, point_y, 8)
             picker.update_color(value)
         elif stage == Stage.GRADE:
-            value = average_sample_point(self.grade_inter,
+            value = average_sample_point(self.ratio_inter,
                                         point_x, point_y, 8)
             picker.update_color(value)
         else:
-            value = average_sample_point(self.final_preview,
+            value = average_sample_point(self.grade_inter,
                                         point_x, point_y, 8)
             picker.update_color(value)
