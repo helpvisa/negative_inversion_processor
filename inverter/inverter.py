@@ -152,20 +152,18 @@ def main():
               file=sys.stderr)
         exit(1)
 
-    # process negatives
+    # load negative
     source_image = load_raw_image(args.image_path).astype(np.float32) / 65535.0
     # apply flat-field correction
     if args.ffc:
         print(f"Applying flat-field correction (strength {args.ffc_strength})",
               file=sys.stderr)
         ffc_image = load_raw_image(args.ffc).astype(np.float32) / 65535.0
-        ffc_luminance = convert_to_grayscale(ffc_image,
-                                             REC2020_WEIGHTS)
-        mean_brightness = np.mean(ffc_luminance)
+        scalar = np.median(ffc_image)
         source_image = divide_by_image(source_image,
-                                        ffc_image * args.ffc_strength)
+                                       ffc_image * args.ffc_strength)
         # apply gain correction
-        source_image = source_image * mean_brightness
+        source_image = source_image * scalar
     adjustments = []
     if args.preset:
         adjustments = load_preset(args.preset)
