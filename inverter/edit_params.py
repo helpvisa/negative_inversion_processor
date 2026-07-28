@@ -1,6 +1,15 @@
 import copy
+from enum import IntEnum
 from dataclasses import dataclass
 from typing import Optional, Tuple
+
+
+class Stage(IntEnum):
+    PRE_INV = 0
+    INV     = 1
+    RATIO   = 2
+    GRADE   = 3
+    FINAL   = 4
 
 
 @dataclass

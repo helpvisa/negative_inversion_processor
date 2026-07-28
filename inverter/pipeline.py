@@ -9,26 +9,29 @@
 #         - final
 import numpy as np
 from scipy import ndimage
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QObject, Signal, Slot
 from PySide6.QtWidgets import QMessageBox
 from deepdiff import DeepDiff
 from threads import WorkerThreadPool
-from edit_params import EditParams
+from edit_params import EditParams, Stage
 from processing import (load_raw_image, rotate_image,
                         white_balance, density_balance,
+                        average_sample_point,
                         invert_to_density, density_to_luminance,
                         convert_to_grayscale_from_g,
                         apply_addition, apply_gain)
-from colour_management import reinhard_tonemap, aces_tonemap
+from custom_widgets import ColorPicker
+from colour_management import aces_tonemap
 from global_vars import REC2020_WEIGHTS
 
 
 # we must subclass QObject to leverage signals
 class ProcessingPipeline(QObject):
     previewUpdated = Signal()
-    editParamsReset = Signal()
+    editParamsUpdated = Signal()
+    colorPicked = Signal(tuple[float, float, float])
 
-    def __init__(self, max_preview_size=1280, analysis_inset=0.8):
+    def __init__(self, max_preview_size=1200, analysis_inset=0.8):
         super().__init__()
         self.threadpool = WorkerThreadPool()
         self.edit_params = EditParams()
@@ -199,7 +202,10 @@ class ProcessingPipeline(QObject):
                 height, width, _ = raw.shape
                 self.raw_width = width
                 self.raw_height = height
-                self.preview_scale = self.max_preview_size / width
+                if width > height:
+                    self.preview_scale = self.max_preview_size / width
+                else:
+                    self.preview_scale = self.max_preview_size / height
                 self.update_analysis_bounds()
                 scaled_raw = ndimage.zoom(raw, (self.preview_scale,
                                                 self.preview_scale, 1), order=0)
@@ -210,7 +216,7 @@ class ProcessingPipeline(QObject):
                 self.source_image = image_data_tuple[0]
                 self.source_image_small = image_data_tuple[1]
                 self.edit_params = EditParams()
-                self.editParamsReset.emit()
+                self.editParamsUpdated.emit()
                 self.pre_inv_process()
 
             def error_func(e):
@@ -244,3 +250,27 @@ class ProcessingPipeline(QObject):
         a_end_y = a_start_y + a_height
         self.auto_analysis_bounds = [[a_start_x, a_start_y],
                                      [a_end_x, a_end_y]]
+
+    @Slot()
+    def pick_color_from_image(self, point_x, point_y,
+                              stage: Stage, picker: ColorPicker):
+        if stage == Stage.PRE_INV:
+            value = average_sample_point(self.pre_inv_inter,
+                                         point_x, point_y, 8)
+            picker.update_color(value)
+        elif stage == Stage.INV:
+            value = average_sample_point(self.inv_inter,
+                                         point_x, point_y, 8)
+            picker.update_color(value)
+        elif stage == Stage.RATIO:
+            value = average_sample_point(self.ratio_inter,
+                                        point_x, point_y, 8)
+            picker.update_color(value)
+        elif stage == Stage.GRADE:
+            value = average_sample_point(self.grade_inter,
+                                        point_x, point_y, 8)
+            picker.update_color(value)
+        else:
+            value = average_sample_point(self.final_preview,
+                                        point_x, point_y, 8)
+            picker.update_color(value)

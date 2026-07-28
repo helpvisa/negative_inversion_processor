@@ -1,12 +1,14 @@
-from PySide6.QtCore import (Qt, Slot, Signal, QPoint, QTimer,
-                            QPointF, QRectF)
+from PySide6.QtCore import (Qt, Slot, Signal, QPoint, QTimer)
 from PySide6.QtGui import QColor, QBrush, QPainter, QCursor
 from PySide6.QtWidgets import (QApplication, QWidget, QGraphicsView,
                                QHBoxLayout, QVBoxLayout,
                                QLabel, QInputDialog, QPushButton,
                                QSpacerItem, QSizePolicy, QFrame)
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
+import numpy as np
+from colour_management import convert_to_sRGB
 from global_vars import GLOBAL_FLAGS
+from edit_params import Stage
 
 
 class ImageView(QGraphicsView):
@@ -302,12 +304,15 @@ class ColorPicker(QWidget):
     Pick a color from the preview image.
     """
     pickRequested = Signal()
-    valueChanged = Signal(float, float)
+    valueChanged = Signal(float, float, Stage, QWidget)
+    colorChanged = Signal(tuple)
 
-    def __init__(self, label, hide_value=False, parent=None):
+    def __init__(self, label, stage: Stage=Stage.PRE_INV,
+                 hide_value=False, parent=None):
         super().__init__(parent)
         self._point: QPoint = QPoint(0, 0)
         self._color: tuple[float, float, float] = None
+        self._stage: Stage=stage
 
         main_layout = QVBoxLayout()
         frame = QFrame()
@@ -352,5 +357,14 @@ class ColorPicker(QWidget):
             # we need != None because 0.0 is a valid value
             if point_x is not None and point_y is not None:
                 self._point = QPoint(point_x, point_y)
-                self.value_display.setText(f"({self._point.x()}, {self._point.y()})")
-                self.valueChanged.emit(point_x, point_y)
+                self.valueChanged.emit(point_x, point_y, self._stage, self)
+
+    def update_color(self, color: tuple[float, float, float]):
+        if color[0] and color[1] and color[2]:
+            self._color = color
+            label_value = np.array_str(color, precision=2)
+            print(f"COLOR UPDATED: {label_value}")
+            self.value_display.setText(f"{label_value}")
+            # get final sRGB colour to use for preview
+            # sRGB_color, _ = convert_to_sRGB(color)
+            self.colorChanged.emit(color)

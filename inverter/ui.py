@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget,
                                QCheckBox, QGroupBox, QScrollArea)
 from custom_widgets import ImageView, LabeledSlider, ColorPicker
 from colour_management import convert_to_sRGB
-from edit_params import EditParams
+from edit_params import EditParams, Stage
 from pipeline import ProcessingPipeline
 from global_vars import GLOBAL_FLAGS
 
@@ -85,7 +85,7 @@ class ToolPanel(QWidget):
         self.pre_inv_rotate_right = QPushButton("Rotate Right")
         self.pre_inv_orientation_layout.addWidget(self.pre_inv_rotate_left)
         self.pre_inv_orientation_layout.addWidget(self.pre_inv_rotate_right)
-        self.pre_inv_wb_picker = ColorPicker("Dmin - Base Color")
+        self.pre_inv_wb_picker = ColorPicker("Dmin - Base Color", Stage.PRE_INV)
         pre_inversion_layout.addLayout(self.pre_inv_orientation_layout)
         pre_inversion_layout.addWidget(self.pre_inv_wb_picker)
         pre_inversion_groupbox.setLayout(pre_inversion_layout)
@@ -110,8 +110,8 @@ class ToolPanel(QWidget):
                                                "#ccccff")
         self.contrast_slider = LabeledSlider("Contrast",
                                              0.0, 5.0, 1.5, 500)
-        self.lo_gray_picker = ColorPicker("Low Gray")
-        self.hi_gray_picker = ColorPicker("High Gray")
+        self.lo_gray_picker = ColorPicker("Low Gray", Stage.INV)
+        self.hi_gray_picker = ColorPicker("High Gray", Stage.INV)
         inversion_layout.addLayout(checkbox_layout)
         inversion_layout.addWidget(self.red_ratio_slider)
         inversion_layout.addWidget(self.blue_ratio_slider)
@@ -157,7 +157,7 @@ class ToolPanel(QWidget):
         grading_tune_layout.addWidget(self.red_tune_slider)
         grading_tune_layout.addWidget(self.green_tune_slider)
         grading_tune_layout.addWidget(self.blue_tune_slider)
-        self.grading_wb_picker = ColorPicker("Pick White Balance",
+        self.grading_wb_picker = ColorPicker("Pick White Balance", Stage.GRADE,
                                              hide_value=True)
         self.exposure_slider = LabeledSlider("Exposure Compensation",
                                              0.0, 10.0, 1.0, 1000)
@@ -190,7 +190,7 @@ class EditingDisplay(QWidget):
         super().__init__(parent)
         # internal tracking vars
         self.edit_params = EditParams()
-        PIPELINE.editParamsReset.connect(self.reset_edit_params)
+        PIPELINE.editParamsUpdated.connect(self.set_edit_params_from_pipeline)
 
         # image preview / canvas
         self.image_preview = PrimaryImageView(self)
@@ -237,9 +237,13 @@ class EditingDisplay(QWidget):
         # but I think I actually kinda like that?
         # allow pickers to trigger picker mode
         tp.pre_inv_wb_picker.pickRequested.connect(ip.view.enable_pick_mode)
+        tp.pre_inv_wb_picker.valueChanged.connect(PIPELINE.pick_color_from_image)
         tp.lo_gray_picker.pickRequested.connect(ip.view.enable_pick_mode)
+        tp.lo_gray_picker.valueChanged.connect(PIPELINE.pick_color_from_image)
         tp.hi_gray_picker.pickRequested.connect(ip.view.enable_pick_mode)
+        tp.hi_gray_picker.valueChanged.connect(PIPELINE.pick_color_from_image)
         tp.grading_wb_picker.pickRequested.connect(ip.view.enable_pick_mode)
+        tp.grading_wb_picker.valueChanged.connect(PIPELINE.pick_color_from_image)
         # allow view to send values back
         ip.view.pointPicked.connect(tp.pre_inv_wb_picker.finish_pick)
         ip.view.pointPicked.connect(tp.lo_gray_picker.finish_pick)
@@ -283,7 +287,7 @@ class EditingDisplay(QWidget):
         if PIPELINE:
             PIPELINE.process_image(ep.copy())
 
-    def reset_edit_params(self):
+    def set_edit_params_from_pipeline(self):
         self.edit_params = PIPELINE.edit_params.copy()
         ep = self.edit_params
         tp = self.tool_panel
