@@ -240,6 +240,7 @@ class EditingDisplay(QWidget):
         ip = self.image_preview
         # ep = self.edit_params
         self.load_button.clicked.connect(self.open_load_dialog)
+        PIPELINE.rawLoaded.connect(self.update_current_filename_display)
         tp.pre_inv_rotate_left.clicked.connect(lambda: self.update_rotation(1))
         tp.pre_inv_rotate_right.clicked.connect(lambda: self.update_rotation(-1))
         # this is super weird and fragile with many edge cases
@@ -280,15 +281,19 @@ class EditingDisplay(QWidget):
         ep.skip_inversion = tp.skip_inversion_checkbox.isChecked()
         ep.bw_mode = tp.bw_checkbox.isChecked()
         ep.base_color_xy = tp.pre_inv_wb_picker.value()
+        ep.base_color = tp.pre_inv_wb_picker.colorValue()
         ep.red_ratio = tp.red_ratio_slider.value()
         ep.blue_ratio = tp.blue_ratio_slider.value()
         ep.green_exponent = tp.contrast_slider.value()
         ep.lo_gray_xy = tp.lo_gray_picker.value()
+        ep.lo_gray = tp.lo_gray_picker.colorValue()
         ep.hi_gray_xy = tp.hi_gray_picker.value()
+        ep.hi_gray = tp.hi_gray_picker.colorValue()
         ep.red_gain = tp.red_gain_slider.value()
         ep.green_gain = tp.green_gain_slider.value()
         ep.blue_gain = tp.blue_gain_slider.value()
         ep.wb_xy = tp.grading_wb_picker.value()
+        ep.wb_reference = tp.grading_wb_picker.colorValue()
         ep.wb_red = tp.red_tune_slider.value()
         ep.wb_green = tp.green_tune_slider.value()
         ep.wb_blue = tp.blue_tune_slider.value()
@@ -303,16 +308,16 @@ class EditingDisplay(QWidget):
         tp = self.tool_panel
         tp.skip_inversion_checkbox.setChecked(ep.skip_inversion)
         tp.bw_checkbox.setChecked(ep.bw_mode)
-        tp.pre_inv_wb_picker.finish_pick(None, None)
+        tp.pre_inv_wb_picker.update_color(ep.base_color)
         tp.red_ratio_slider.setValue(ep.red_ratio)
         tp.blue_ratio_slider.setValue(ep.blue_ratio)
         tp.contrast_slider.setValue(ep.green_exponent)
-        tp.lo_gray_picker.finish_pick(None, None)
-        tp.hi_gray_picker.finish_pick(None, None)
+        tp.lo_gray_picker.update_color(ep.lo_gray)
+        tp.hi_gray_picker.update_color(ep.hi_gray)
         tp.red_gain_slider.setValue(ep.red_gain)
         tp.green_gain_slider.setValue(ep.green_gain)
         tp.blue_gain_slider.setValue(ep.blue_gain)
-        tp.grading_wb_picker.finish_pick(None, None)
+        tp.grading_wb_picker.update_color(ep.wb_reference)
         tp.red_tune_slider.setValue(ep.wb_red)
         tp.green_tune_slider.setValue(ep.wb_green)
         tp.blue_tune_slider.setValue(ep.wb_blue)
@@ -324,6 +329,9 @@ class EditingDisplay(QWidget):
         image_path, _ = QFileDialog.getOpenFileName()
         PIPELINE.load_raw_file(image_path)
         LOADED_RAW_PATH = image_path
+
+    def update_current_filename_display(self, filename: str):
+        self.current_file_label.setText(filename)
 
 
 class MainWindow(QMainWindow):

@@ -23,13 +23,16 @@ class EditParams:
     bw_mode: bool = False
     # xy coord for sampling base colour of film
     base_color_xy: Optional[Tuple[int, int]] = None
+    base_color: Optional[Tuple[float, float, float]] = None
     # inversion ratios
     red_ratio: float = 1.36
     blue_ratio: float = 0.86
     green_exponent: float = 1.5
     # pickers for estimating the ratios
     lo_gray_xy: Optional[Tuple[int, int]] = None
+    lo_gray: Optional[Tuple[float, float, float]] = None
     hi_gray_xy: Optional[Tuple[int, int]] = None
+    hi_gray: Optional[Tuple[float, float, float]] = None
 
     # --- final user grade
     red_gain: float = 1.0
@@ -37,6 +40,7 @@ class EditParams:
     blue_gain: float = 1.0
     # wb picker
     wb_xy: Optional[Tuple[int, int]] = None
+    wb_reference: Optional[Tuple[float, float, float]] = None
     # with rgb values for additional fine-tuning
     wb_red: float = 0.0
     wb_green: float = 0.0

@@ -27,6 +27,7 @@ from global_vars import REC2020_WEIGHTS
 
 # we must subclass QObject to leverage signals
 class ProcessingPipeline(QObject):
+    rawLoaded = Signal(str)
     previewUpdated = Signal()
     editParamsUpdated = Signal()
     colorPicked = Signal(tuple[float, float, float])
@@ -56,8 +57,8 @@ class ProcessingPipeline(QObject):
     # perform a deep comparison of self.edit_params and the new EditParams
     # passed in to determine where in the pipeline the reprocess needs to occur
     def process_image(self, new_edit_params):
-        if (self.edit_params != new_edit_params):
-            difference = DeepDiff(self.edit_params, new_edit_params)
+        difference = DeepDiff(self.edit_params, new_edit_params)
+        if difference:
             self.edit_params = new_edit_params
             # eventually, we check the difference to update only where
             # a change has actually occurred
@@ -210,6 +211,7 @@ class ProcessingPipeline(QObject):
                 self.update_analysis_bounds()
                 scaled_raw = ndimage.zoom(raw, (self.preview_scale,
                                                 self.preview_scale, 1), order=0)
+                self.rawLoaded.emit(image_path)
                 return raw, scaled_raw
 
             # the function to be executed upon thread completion
