@@ -47,25 +47,35 @@ class PrimaryImageView(QWidget):
         image
         """
         global PIPELINE
-        preview_image = PIPELINE.final_preview.copy()
-        if preview_image.ndim < 3:
-            preview_image = np.stack((preview_image,
-                                      preview_image,
-                                      preview_image), axis=-1)
-        display_image, _ = convert_to_sRGB(preview_image)
-        display_image = np.clip(display_image, a_min=0, a_max=1)
-        q_image = QImage(np.multiply(display_image, 255).astype(np.uint8),
-                         display_image.shape[1],
-                         display_image.shape[0],
-                         3 * display_image.shape[1],
-                         QImage.Format.Format_RGB888)
-        # convert to QPixmap for display
-        new_pixmap = QPixmap.fromImage(q_image)
-        self.preview_pixmap.setPixmap(new_pixmap)
-        # resize view to match image
-        self.scene.setSceneRect(self.preview_pixmap.boundingRect())
-        if center:
-            self.view.centerOn(self.preview_pixmap)
+
+        def process():
+            preview_image = PIPELINE.final_preview.copy()
+            if preview_image.ndim < 3:
+                preview_image = np.stack((preview_image,
+                                          preview_image,
+                                          preview_image), axis=-1)
+            display_image, _ = convert_to_sRGB(preview_image)
+            display_image = np.clip(display_image, a_min=0, a_max=1)
+            q_image = QImage(np.multiply(display_image, 255).astype(np.uint8),
+                             display_image.shape[1],
+                             display_image.shape[0],
+                             3 * display_image.shape[1],
+                             QImage.Format.Format_RGB888)
+            return q_image
+
+        def finish(q_image):
+            # convert to QPixmap for display
+            new_pixmap = QPixmap.fromImage(q_image)
+            self.preview_pixmap.setPixmap(new_pixmap)
+            # resize view to match image
+            self.scene.setSceneRect(self.preview_pixmap.boundingRect())
+            if center:
+                self.view.centerOn(self.preview_pixmap)
+        thread = PIPELINE.threadpool.instantiate_thread(process)
+        PIPELINE.threadpool.active_threads[thread.thread_id] = thread
+        thread.signals.result.connect(finish)
+        thread.signals.finished.connect(PIPELINE.threadpool.remove_thread)
+        PIPELINE.threadpool.start(thread)
 
 
 class ToolPanel(QWidget):
