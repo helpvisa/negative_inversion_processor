@@ -24,3 +24,4 @@
         - persist in-memory? sidecar? both?
     - copy/paste EditParams for easier batching
         - allow global paste in folder view
+- tree view for loaded folders?

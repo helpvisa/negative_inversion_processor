@@ -17,7 +17,7 @@ for item in "$1"/*."$2"; do
             -p "$WORK_DIR/bw-profile.icc" \
             --preset "$3" \
             --bw \
-            --crop-inset 0.89 \
+            --crop-inset 0.95 \
             --ffc "$5" \
             "$item" \
             "$4/$(basename $item .$2).tiff"
