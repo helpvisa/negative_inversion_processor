@@ -99,6 +99,18 @@ def divide_by_image(a_data: np.ndarray, b_data: np.ndarray):
     return result
 
 
+def apply_ffc(image_data: np.ndarray, ffc_data: np.ndarray,
+              strength: float = 1.0) -> np.ndarray:
+    print(f"Applying flat-field correction (strength {strength})",
+          file=sys.stderr)
+    scalar = np.median(ffc_data)
+    corrected_image = divide_by_image(image_data,
+                                      ffc_data * strength)
+    # apply gain correction
+    corrected_image = corrected_image * scalar
+    return corrected_image
+
+
 def average_sample_point(image_data, sample_x, sample_y, kernel):
     """
     Average a box around a given sample point and return the value

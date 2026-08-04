@@ -13,7 +13,7 @@ from processing import (load_raw_image, save_image,
                         white_balance, density_balance, divide_by_image,
                         apply_gain, apply_addition, normalize_image,
                         convert_to_grayscale_from_g, convert_to_grayscale,
-                        process_all_adjustments)
+                        apply_ffc, process_all_adjustments)
 from global_vars import REC2020_WEIGHTS
 
 
@@ -156,14 +156,8 @@ def main():
     source_image = load_raw_image(args.image_path).astype(np.float32) / 65535.0
     # apply flat-field correction
     if args.ffc:
-        print(f"Applying flat-field correction (strength {args.ffc_strength})",
-              file=sys.stderr)
         ffc_image = load_raw_image(args.ffc).astype(np.float32) / 65535.0
-        scalar = np.median(ffc_image)
-        source_image = divide_by_image(source_image,
-                                       ffc_image * args.ffc_strength)
-        # apply gain correction
-        source_image = source_image * scalar
+        source_image = apply_ffc(source_image, ffc_image, args.ffc_strength)
     adjustments = []
     if args.preset:
         adjustments = load_preset(args.preset)
