@@ -16,8 +16,7 @@ fi
 for item in "$1"/*."$2"; do
     if [ "$4" != "basename $item" ]; then
         python3 "$WORK_DIR/inverter/inverter.py" \
-            -p "$WORK_DIR/bw-profile.icc" \
-            --bw \
+            -p "$WORK_DIR/profile.icc" \
             --preset "$5" \
             --crop-inset 0.91 \
             --ffc "$4" \
