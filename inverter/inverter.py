@@ -83,21 +83,21 @@ def process_negative(source_image, args):
         if not args.skip_auto_adjustments:
             # adjust the individual densities to eliminate colour casts
             scale_adjustment, shift_adjustment = density_balance(working_image,
-                                                                 analysis_bounding_box,
-                                                                 args.exponent,
-                                                                 None,
-                                                                 args.red_ratio,
-                                                                 args.blue_ratio)
+                                                                 region=analysis_bounding_box,
+                                                                 exponent=args.exponent,
+                                                                 red_ratio=args.red_ratio,
+                                                                 blue_ratio=args.blue_ratio)
             working_image = apply_gain(working_image, scale_adjustment["values"])
             working_image = apply_addition(working_image, shift_adjustment["values"])
             adjustments.append(scale_adjustment.copy())
             adjustments.append(shift_adjustment.copy())
             # readjust white balance
-            new_adjustment = white_balance(working_image, analysis_bounding_box,
-                                           REC2020_WEIGHTS, args.wb_point,
-                                           mode='add')
-            working_image = apply_addition(working_image, new_adjustment["values"])
-            adjustments.append(new_adjustment.copy())
+            if args.wb_point:
+                new_adjustment = white_balance(working_image, analysis_bounding_box,
+                                               REC2020_WEIGHTS, args.wb_point,
+                                               mode='add')
+                working_image = apply_addition(working_image, new_adjustment["values"])
+                adjustments.append(new_adjustment.copy())
 
         if args.red_gain != 1.0 or args.green_gain != 1.0 or args.blue_gain != 1.0:
             # apply a user-adjustable gain to balance in density space
