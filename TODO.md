@@ -25,3 +25,14 @@
     - copy/paste EditParams for easier batching
         - allow global paste in folder view
 - tree view for loaded folders?
+
+## NOTES
+- how to apply the *exact same results* across entire roll in UI?
+    - by default, median in each channel is used as reference
+        - this is required for a decent inversion
+    - sometimes, the median used can skew results across different images in
+      a given roll
+    - option to apply *exact same processed settings* to each image in roll?
+        - circumvents UI edit params
+        - possibly unintuitive?
+    - "process entire roll with these settings" button?
