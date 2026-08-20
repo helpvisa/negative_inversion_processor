@@ -28,10 +28,10 @@
 
 ## NOTES
 - how to apply the *exact same results* across entire roll in UI?
-    - by default, median in each channel is used as reference
-        - this is required for a decent inversion
     - sometimes, the median used can skew results across different images in
       a given roll
+        - the base color is now used as the new reference, for more consistent
+          inversions
     - option to apply *exact same processed settings* to each image in roll?
         - circumvents UI edit params
         - possibly unintuitive?
