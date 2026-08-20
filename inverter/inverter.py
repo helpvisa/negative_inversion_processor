@@ -86,7 +86,8 @@ def process_negative(source_image, args):
                                                                  region=analysis_bounding_box,
                                                                  exponent=args.exponent,
                                                                  red_ratio=args.red_ratio,
-                                                                 blue_ratio=args.blue_ratio)
+                                                                 blue_ratio=args.blue_ratio,
+                                                                 ref_point_in=args.ref_point)
             working_image = apply_gain(working_image, scale_adjustment["values"])
             working_image = apply_addition(working_image, shift_adjustment["values"])
             adjustments.append(scale_adjustment.copy())
