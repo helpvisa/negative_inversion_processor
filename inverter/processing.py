@@ -266,33 +266,20 @@ def density_balance(image_data, region=None, exponent=1.5, ref_point_in=None,
         print(f"CUSTOM: Custom reference point: {ref_point_in}",
               file=sys.stderr)
         ref_in = image_data[ref_point_in[1], ref_point_in[0]]
-    elif region:
-        analysis_region = image_data[region[0][1]:region[1][1],
-                                     region[0][0]:region[1][0]]
+    # elif region:
+        # analysis_region = image_data[region[0][1]:region[1][1],
+                                     # region[0][0]:region[1][0]]
         # estimate a reference median point in the image
         # r_med = np.median(analysis_region[:, :, 0])
         # g_med = np.median(analysis_region[:, :, 1])
         # b_med = np.median(analysis_region[:, :, 2])
         # ref_in = [r_med, g_med, b_med]
-        lum = convert_to_grayscale_from_g(analysis_region)
-        median_lum = np.median(lum)
-        # find the index closest to our median
-        lum_diff = np.abs(lum.ravel() - median_lum)
-        closest_idx = np.argmin(lum_diff)
-        coords = np.unravel_index(closest_idx, lum.shape)
-        ref_in = analysis_region[coords]
     else:
         # r_med = np.median(image_data[:, :, 0])
         # g_med = np.median(image_data[:, :, 1])
         # b_med = np.median(image_data[:, :, 2])
         # ref_in = [r_med, g_med, b_med]
-        lum = convert_to_grayscale_from_g(image_data)
-        median_lum = np.median(lum)
-        # find the index closest to our median
-        lum_diff = np.abs(lum.ravel() - median_lum)
-        closest_idx = np.argmin(lum_diff)
-        coords = np.unravel_index(closest_idx, lum.shape)
-        ref_in = image_data[coords]
+        ref_in = np.array([0.565, 0.565, 0.565])
     # target output value (ref_in -> ref_out)
     # eventually, we will want to make this tweakable instead of
     # tweaking the post-inversion exposure with gain

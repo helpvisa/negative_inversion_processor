@@ -82,11 +82,7 @@ class ProcessingPipeline(QObject):
                 self.pre_inv_inter = apply_gain(self.rotation_inter,
                                                 wb_adjustment['values'])
             else:
-                wb_adjustment = white_balance(self.rotation_inter,
-                                              colourspace_weights=REC2020_WEIGHTS,
-                                              region=self.auto_analysis_bounds)
-                self.pre_inv_inter = apply_gain(self.rotation_inter,
-                                                wb_adjustment['values'])
+                self.pre_inv_inter = self.rotation_inter
 
         def proceed():
             self.inv_process()
@@ -108,6 +104,7 @@ class ProcessingPipeline(QObject):
 
         def proceed():
             self.ratio_process()
+
         thread = self.threadpool.instantiate_thread(current)
         self.threadpool.active_threads[thread.thread_id] = thread
         thread.signals.result.connect(proceed)
@@ -121,7 +118,6 @@ class ProcessingPipeline(QObject):
             if not ep.skip_inversion:
                 if not ep.bw_mode:
                     scale, shift = density_balance(self.inv_inter,
-                                                   region=self.auto_analysis_bounds,
                                                    exponent=ep.green_exponent,
                                                    red_ratio=ep.red_ratio,
                                                    blue_ratio=ep.blue_ratio)
@@ -129,7 +125,6 @@ class ProcessingPipeline(QObject):
                     self.ratio_inter = apply_addition(self.ratio_inter, shift['values'])
                 else:
                     scale, shift = density_balance(self.inv_inter,
-                                                   region=self.auto_analysis_bounds,
                                                    exponent=ep.green_exponent,
                                                    red_ratio=1.0,
                                                    blue_ratio=1.0)
