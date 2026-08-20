@@ -272,15 +272,17 @@ def density_balance(image_data, region=None, exponent=1.5, ref_point_in=None,
         r_med = np.median(analysis_region[:, :, 0])
         g_med = np.median(analysis_region[:, :, 1])
         b_med = np.median(analysis_region[:, :, 2])
-        ref_in = [r_med, g_med, b_med]
+        # ref_in = [r_med, g_med, b_med]
+        ref_in = np.min(analysis_region, axis=(0, 1))
     else:
         r_med = np.median(image_data[:, :, 0])
         g_med = np.median(image_data[:, :, 1])
         b_med = np.median(image_data[:, :, 2])
         ref_in = [r_med, g_med, b_med]
-    # peg our output value to middle gray
-    # -log10(0.18) = ~0.745 for density-space value
-    ref_out = np.array([0.745, 0.745, 0.745])
+    # target output value (ref_in -> ref_out)
+    # eventually, we will want to make this tweakable instead of
+    # tweaking the post-inversion exposure with gain
+    ref_out = np.array([0.1, 0.1, 0.1])
     # use ratios to determine channel exponents
     rexp = red_ratio * exponent
     gexp = exponent
