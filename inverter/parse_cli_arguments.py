@@ -66,15 +66,15 @@ def parse_user_arguments():
                         action='store_true',
                         help="Show bounds of analysis region.")
     parser.add_argument('--red-gain', '-R',
-                        type=float, default=1.0,
+                        type=float, default=0.0,
                         metavar="FLOAT",
                         help="Custom red balance (in density space).")
     parser.add_argument('--green-gain', '-G',
-                        type=float, default=1.0,
+                        type=float, default=0.0,
                         metavar="FLOAT",
                         help="Custom green balance (in density space).")
     parser.add_argument('--blue-gain', '-B',
-                        type=float, default=1.0,
+                        type=float, default=0.0,
                         metavar="FLOAT",
                         help="Custom blue balance (in density space).")
     parser.add_argument('--wb-point',

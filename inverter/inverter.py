@@ -93,24 +93,24 @@ def process_negative(source_image, args):
             adjustments.append(scale_adjustment.copy())
             adjustments.append(shift_adjustment.copy())
             # readjust white balance
-            if args.wb_point:
-                new_adjustment = white_balance(working_image, analysis_bounding_box,
-                                               REC2020_WEIGHTS, args.wb_point,
-                                               mode='add')
-                working_image = apply_addition(working_image, new_adjustment["values"])
-                adjustments.append(new_adjustment.copy())
+            # if args.wb_point:
+            #     new_adjustment = white_balance(working_image, analysis_bounding_box,
+            #                                    REC2020_WEIGHTS, args.wb_point,
+            #                                    mode='add')
+            #     working_image = apply_addition(working_image, new_adjustment["values"])
+            #     adjustments.append(new_adjustment.copy())
 
         if args.red_gain != 1.0 or args.green_gain != 1.0 or args.blue_gain != 1.0:
             # apply a user-adjustable gain to balance in density space
             new_adjustment = {
-                "type": "mult",
+                "type": "add",
                 "values": (args.red_gain,
                            args.green_gain,
                            args.blue_gain)
             }
             working_image = apply_gain(working_image, new_adjustment["values"])
             adjustments.append(new_adjustment.copy())
-            print(f"ADJUSTMENT: User gain:\n"
+            print(f"ADJUSTMENT: User white balance adjustments:\n"
                   f"          RED:   {args.red_gain}\n"
                   f"          GREEN: {args.green_gain}\n"
                   f"          BLUE:  {args.blue_gain}",
