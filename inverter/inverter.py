@@ -80,34 +80,48 @@ def process_negative(source_image, args):
         working_image = invert_to_density(working_image)
         adjustments.append(new_adjustment.copy())
 
-        if not args.skip_auto_adjustments or args.ref_point:
-            # adjust the individual densities to eliminate colour casts
-            scale_adjustment, shift_adjustment = density_balance(working_image,
-                                                                 region=analysis_bounding_box,
-                                                                 exponent=args.exponent,
-                                                                 red_ratio=args.red_ratio,
-                                                                 blue_ratio=args.blue_ratio,
-                                                                 ref_point_in=args.ref_point,
-                                                                 pivot=args.pivot)
-            working_image = apply_gain(working_image, scale_adjustment["values"])
-            working_image = apply_addition(working_image, shift_adjustment["values"])
-            adjustments.append(scale_adjustment.copy())
-            adjustments.append(shift_adjustment.copy())
+        # adjust the individual densities to eliminate colour casts
+        scale_adjustment, shift_adjustment = density_balance(working_image,
+                                                             region=analysis_bounding_box,
+                                                             exponent=args.exponent,
+                                                             red_ratio=args.red_ratio,
+                                                             blue_ratio=args.blue_ratio,
+                                                             ref_point_in=args.ref_point,
+                                                             pivot=args.pivot)
+        working_image = apply_gain(working_image, scale_adjustment["values"])
+        working_image = apply_addition(working_image, shift_adjustment["values"])
+        adjustments.append(scale_adjustment.copy())
+        adjustments.append(shift_adjustment.copy())
 
         if args.red_gain != 1.0 or args.green_gain != 1.0 or args.blue_gain != 1.0:
             # apply a user-adjustable gain to balance in density space
             new_adjustment = {
-                "type": "add",
+                "type": "mult",
                 "values": (args.red_gain,
                            args.green_gain,
                            args.blue_gain)
             }
-            working_image = apply_addition(working_image, new_adjustment["values"])
+            working_image = apply_gain(working_image, new_adjustment["values"])
             adjustments.append(new_adjustment.copy())
-            print(f"ADJUSTMENT: User white balance adjustments:\n"
+            print(f"ADJUSTMENT: User gain adjustments:\n"
                   f"          RED:   {args.red_gain}\n"
                   f"          GREEN: {args.green_gain}\n"
                   f"          BLUE:  {args.blue_gain}",
+                  file=sys.stderr)
+        if args.red_offset != 0.0 or args.green_offset != 0.0 or args.blue_offset != 0.0:
+            # apply a user-adjustable gain to balance in density space
+            new_adjustment = {
+                "type": "add",
+                "values": (args.red_offset,
+                           args.green_offset,
+                           args.blue_offset)
+            }
+            working_image = apply_addition(working_image, new_adjustment["values"])
+            adjustments.append(new_adjustment.copy())
+            print(f"ADJUSTMENT: User offset adjustments:\n"
+                  f"          RED:   {args.red_offset}\n"
+                  f"          GREEN: {args.green_offset}\n"
+                  f"          BLUE:  {args.blue_offset}",
                   file=sys.stderr)
         # map density to luminance
         new_adjustment = {"type": "density_to_luminance", "values": None}
@@ -181,7 +195,7 @@ def main():
                                       crop_start_x:crop_end_x]
         # apply tonemapping
         if args.tonemap:
-            final_image = aces_tonemap(final_image)
+            final_image = aces_tonemap(final_image, args.toe)
         # save image to disk
         # do we possess an icc profile to embed?
         icc_profile = None

@@ -6,7 +6,7 @@ from processing import convert_to_grayscale
 from global_vars import REC2020_WEIGHTS
 
 
-def aces_tonemap(image_data):
+def aces_tonemap(image_data, toe_scale: float = 1.0):
     """
     ACES-style tonemapping from HDR to 0.0 <-> 1.0.
     Uses an approximate curve that doesn't require altering our primaries.
@@ -14,9 +14,39 @@ def aces_tonemap(image_data):
     See https://github.com/TheRealMJP/BakingLab/blob/master/BakingLab/ACES.hlsl
     (^ MIT License)
     """
-    a = image_data * (image_data + 0.0245786) - 0.000090537
-    b = image_data * (0.983729 * image_data + 0.4329510) + 0.238081
-    return a / b
+    # linear rec.2020 -> aces matrix
+    mat_in = np.array([
+        [0.9465901, 0.0459193, 0.0074905],
+        [0.0127789, 0.9828225, 0.0043986],
+        [0.0152831, 0.0506650, 0.9340367]
+    ])
+
+    # aces -> linear rec.2020 matrix
+    mat_out = np.array([
+        [0.9691157, 0.0255455, 0.0053380],
+        [0.0069938, 0.9806634, 0.0123411],
+        [0.0047768, -0.0381346, 1.0333577]
+    ])
+
+    # apply linear rec.2020 -> aces
+    # mat_in.T makes sure numpy respects array shape
+    # skip if image is grayscale (only 1 dimension)
+    is_grayscale = image_data.ndim < 3 or image_data.shape[-1] == 1
+    v = image_data
+    if not is_grayscale:
+        v = v @ mat_in.T
+
+    # scale E to affect toe
+    E = 0.238081 * toe_scale
+    a = v * (v + 0.0245786) - 0.000090537
+    b = v * (0.983729 * v + 0.4329510) + E
+    tonemapped = a / b
+
+    # apply aces -> linear rec.2020
+    out_data = tonemapped
+    if not is_grayscale:
+        out_data = out_data @ mat_out.T
+    return np.clip(out_data, 0.0, 1.0)
 
 
 def reinhard_tonemap(image_data, key=1.0):

@@ -22,7 +22,6 @@ from processing import (load_raw_image, rotate_image,
                         apply_addition, apply_gain)
 from custom_widgets import ColorPicker
 from colour_management import aces_tonemap
-from global_vars import REC2020_WEIGHTS
 
 
 # we must subclass QObject to leverage signals
@@ -120,14 +119,18 @@ class ProcessingPipeline(QObject):
                     scale, shift = density_balance(self.inv_inter,
                                                    exponent=ep.green_exponent,
                                                    red_ratio=ep.red_ratio,
-                                                   blue_ratio=ep.blue_ratio)
+                                                   blue_ratio=ep.blue_ratio,
+                                                   pivot=ep.pivot,
+                                                   out_brightness=ep.out_brightness)
                     self.ratio_inter = apply_gain(self.inv_inter, scale['values'])
                     self.ratio_inter = apply_addition(self.ratio_inter, shift['values'])
                 else:
                     scale, shift = density_balance(self.inv_inter,
                                                    exponent=ep.green_exponent,
                                                    red_ratio=1.0,
-                                                   blue_ratio=1.0)
+                                                   blue_ratio=1.0,
+                                                   pivot=ep.pivot,
+                                                   out_brightness=ep.out_brightness)
                     self.ratio_inter = apply_gain(self.inv_inter, scale['values'])
                     self.ratio_inter = apply_addition(self.ratio_inter, shift['values'])
             else:
@@ -158,9 +161,6 @@ class ProcessingPipeline(QObject):
             # then convert to luminance
             if not ep.skip_inversion:
                 self.grade_inter = density_to_luminance(self.grade_inter)
-            # then adjust exposure
-            comp_tuple = (ep.exposure_comp, ep.exposure_comp, ep.exposure_comp)
-            self.grade_inter = apply_gain(self.grade_inter, comp_tuple)
             self.final_preview = self.grade_inter.copy()
             if ep.bw_mode:
                 self.final_preview = convert_to_grayscale_from_g(self.final_preview)
@@ -178,8 +178,10 @@ class ProcessingPipeline(QObject):
         self.threadpool.start(thread)
 
     def tonemap_process(self):
+        ep = self.edit_params
+
         def current():
-            self.final_preview = aces_tonemap(self.final_preview)
+            self.final_preview = aces_tonemap(self.final_preview, ep.toe)
 
         def proceed():
             self.previewUpdated.emit()

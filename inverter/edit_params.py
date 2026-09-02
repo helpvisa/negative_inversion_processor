@@ -24,10 +24,12 @@ class EditParams:
     # xy coord for sampling base colour of film
     base_color_xy: Optional[Tuple[int, int]] = None
     base_color: Optional[Tuple[float, float, float]] = None
-    # inversion ratios
+    # inversion points and ratios
+    pivot: float = 0.745
     red_ratio: float = 1.36
     blue_ratio: float = 0.86
     green_exponent: float = 1.5
+    out_brightness: float = 0.745
     # pickers for estimating the ratios
     lo_gray_xy: Optional[Tuple[int, int]] = None
     lo_gray: Optional[Tuple[float, float, float]] = None
@@ -45,8 +47,8 @@ class EditParams:
     wb_red: float = 0.0
     wb_green: float = 0.0
     wb_blue: float = 0.0
-    exposure_comp: float = 1.0
     tonemap: bool = False
+    toe: float = 1.0
 
     def copy(self) -> "EditParams":
         """

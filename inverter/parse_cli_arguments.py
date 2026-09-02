@@ -66,17 +66,29 @@ def parse_user_arguments():
                         action='store_true',
                         help="Show bounds of analysis region.")
     parser.add_argument('--red-gain', '-R',
-                        type=float, default=0.0,
+                        type=float, default=1.0,
                         metavar="FLOAT",
-                        help="Custom red balance (in density space).")
+                        help="Custom red gain (in density space).")
     parser.add_argument('--green-gain', '-G',
-                        type=float, default=0.0,
+                        type=float, default=1.0,
                         metavar="FLOAT",
-                        help="Custom green balance (in density space).")
+                        help="Custom green gain (in density space).")
     parser.add_argument('--blue-gain', '-B',
+                        type=float, default=1.0,
+                        metavar="FLOAT",
+                        help="Custom blue gain (in density space).")
+    parser.add_argument('--red-offset',
                         type=float, default=0.0,
                         metavar="FLOAT",
-                        help="Custom blue balance (in density space).")
+                        help="Custom red offset (in density space).")
+    parser.add_argument('--green-offset',
+                        type=float, default=0.0,
+                        metavar="FLOAT",
+                        help="Custom green offset (in density space).")
+    parser.add_argument('--blue-offset',
+                        type=float, default=0.0,
+                        metavar="FLOAT",
+                        help="Custom blue offset (in density space).")
     parser.add_argument('--wb-point',
                         nargs=2,
                         metavar=("X1", "Y1"),
@@ -116,4 +128,7 @@ def parse_user_arguments():
     parser.add_argument('--tonemap',
                         action='store_true',
                         help="Apply ACES tonemapping to final output.")
+    parser.add_argument('--toe',
+                        type=float, default=1.0,
+                        help="Toe strength when applying tonemapping.")
     return parser.parse_args()
