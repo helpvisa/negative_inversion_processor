@@ -7,7 +7,7 @@ import parse_cli_arguments
 from presets import save_preset, load_preset
 from PIL import ImageCms
 from colour_management import (convert_to_sRGB, ocio_load_and_create_config,
-                               ocio_convert_colorspace)
+                               ocio_convert_colorspace, aces_tonemap)
 from processing import (load_raw_image, save_image,
                         invert_to_density, density_to_luminance,
                         white_balance, density_balance, divide_by_image,
@@ -67,7 +67,7 @@ def process_negative(source_image, args):
                              [analysis_end_x, analysis_end_y]]
 
     # perform pre-inversion white balance
-    if not args.skip_auto_adjustments:
+    if not args.skip_auto_adjustments or args.wb_point:
         new_adjustment = white_balance(working_image, analysis_bounding_box,
                                        REC2020_WEIGHTS, args.wb_point,
                                        mode='mult')
@@ -80,25 +80,19 @@ def process_negative(source_image, args):
         working_image = invert_to_density(working_image)
         adjustments.append(new_adjustment.copy())
 
-        if not args.skip_auto_adjustments:
+        if not args.skip_auto_adjustments or args.ref_point:
             # adjust the individual densities to eliminate colour casts
             scale_adjustment, shift_adjustment = density_balance(working_image,
                                                                  region=analysis_bounding_box,
                                                                  exponent=args.exponent,
                                                                  red_ratio=args.red_ratio,
                                                                  blue_ratio=args.blue_ratio,
-                                                                 ref_point_in=args.ref_point)
+                                                                 ref_point_in=args.ref_point,
+                                                                 pivot=args.pivot)
             working_image = apply_gain(working_image, scale_adjustment["values"])
             working_image = apply_addition(working_image, shift_adjustment["values"])
             adjustments.append(scale_adjustment.copy())
             adjustments.append(shift_adjustment.copy())
-            # readjust white balance
-            # if args.wb_point:
-            #     new_adjustment = white_balance(working_image, analysis_bounding_box,
-            #                                    REC2020_WEIGHTS, args.wb_point,
-            #                                    mode='add')
-            #     working_image = apply_addition(working_image, new_adjustment["values"])
-            #     adjustments.append(new_adjustment.copy())
 
         if args.red_gain != 1.0 or args.green_gain != 1.0 or args.blue_gain != 1.0:
             # apply a user-adjustable gain to balance in density space
@@ -108,7 +102,7 @@ def process_negative(source_image, args):
                            args.green_gain,
                            args.blue_gain)
             }
-            working_image = apply_gain(working_image, new_adjustment["values"])
+            working_image = apply_addition(working_image, new_adjustment["values"])
             adjustments.append(new_adjustment.copy())
             print(f"ADJUSTMENT: User white balance adjustments:\n"
                   f"          RED:   {args.red_gain}\n"
@@ -185,6 +179,9 @@ def main():
             crop_end_y = crop_start_y + crop_height
             final_image = final_image[crop_start_y:crop_end_y,
                                       crop_start_x:crop_end_x]
+        # apply tonemapping
+        if args.tonemap:
+            final_image = aces_tonemap(final_image)
         # save image to disk
         # do we possess an icc profile to embed?
         icc_profile = None

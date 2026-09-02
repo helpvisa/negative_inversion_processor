@@ -255,7 +255,8 @@ def white_balance(image_data, region=None, colourspace_weights=None,
 
 
 def density_balance(image_data, region=None, exponent=1.5, ref_point_in=None,
-                    red_ratio=1.36, blue_ratio=0.86):
+                    red_ratio=1.36, blue_ratio=0.86,
+                    pivot=0.745, out_brightness=0.745):
     """
     Multiply the individual colour channels until equalized at a given point.
     Neutralizes colour casts in highlights and shadows.
@@ -266,25 +267,12 @@ def density_balance(image_data, region=None, exponent=1.5, ref_point_in=None,
         print(f"CUSTOM: Custom reference point: {ref_point_in}",
               file=sys.stderr)
         ref_in = image_data[ref_point_in[1], ref_point_in[0]]
-    # elif region:
-        # analysis_region = image_data[region[0][1]:region[1][1],
-                                     # region[0][0]:region[1][0]]
-        # estimate a reference median point in the image
-        # r_med = np.median(analysis_region[:, :, 0])
-        # g_med = np.median(analysis_region[:, :, 1])
-        # b_med = np.median(analysis_region[:, :, 2])
-        # ref_in = [r_med, g_med, b_med]
     else:
-        # r_med = np.median(image_data[:, :, 0])
-        # g_med = np.median(image_data[:, :, 1])
-        # b_med = np.median(image_data[:, :, 2])
-        # ref_in = [r_med, g_med, b_med]
-        # ref_in = np.array([0.565, 0.565, 0.565])
-        ref_in = np.array([0.745, 0.745, 0.745])
+        ref_in = np.array([pivot, pivot, pivot])
     # target output value (ref_in -> ref_out)
     # eventually, we will want to make this tweakable instead of
     # tweaking the post-inversion exposure with gain
-    ref_out = np.array([0.745, 0.745, 0.745])
+    ref_out = np.array([out_brightness, out_brightness, out_brightness])
     # use ratios to determine channel exponents
     rexp = red_ratio * exponent
     gexp = exponent

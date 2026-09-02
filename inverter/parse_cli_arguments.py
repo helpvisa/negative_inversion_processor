@@ -98,6 +98,9 @@ def parse_user_arguments():
     parser.add_argument('--blue-ratio',
                         type=float, default=0.86,
                         help="Adjust blue ratio of film base.")
+    parser.add_argument('--pivot',
+                        type=float, default=0.745,
+                        help="Middle gray pivot point.")
     parser.add_argument('--normalize',
                         action='store_true',
                         help="Normalize final output between 0 and 1 (default true).")
@@ -110,4 +113,7 @@ def parse_user_arguments():
     parser.add_argument('--ffc-strength',
                         type=float, default=1.0,
                         help="Strength of flat-field correction.")
+    parser.add_argument('--tonemap',
+                        action='store_true',
+                        help="Apply ACES tonemapping to final output.")
     return parser.parse_args()
