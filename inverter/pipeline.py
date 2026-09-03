@@ -14,14 +14,15 @@ from PySide6.QtWidgets import QMessageBox
 from deepdiff import DeepDiff
 from threads import WorkerThreadPool
 from edit_params import EditParams, Stage
-from processing import (load_raw_image, rotate_image,
+from processing import (load_raw_image, save_image, rotate_image,
                         white_balance, density_balance,
                         average_sample_point,
                         invert_to_density, density_to_luminance,
                         convert_to_grayscale_from_g,
-                        apply_addition, apply_gain)
+                        apply_addition, apply_gain, apply_ffc)
 from custom_widgets import ColorPicker
 from colour_management import aces_tonemap
+from global_vars import PHOTO_INDEX
 
 
 # we must subclass QObject to leverage signals
@@ -39,6 +40,8 @@ class ProcessingPipeline(QObject):
         self.raw_width = 0
         self.raw_height = 0
         self.auto_analysis_bounds = None
+        self.ffc_image = None
+        self.ffc_image_small = None
         self.source_image = None
         self.source_image_small = None
         self.final_preview = None
@@ -58,16 +61,29 @@ class ProcessingPipeline(QObject):
     def process_image(self, new_edit_params):
         difference = DeepDiff(self.edit_params, new_edit_params)
         if difference:
+            print(difference)
             self.edit_params = new_edit_params
             # eventually, we check the difference to update only where
             # a change has actually occurred
-            self.pre_inv_process()
+            changes = difference['values_changed']
+            self.pre_inv_process(preview=True)
 
-    def pre_inv_process(self):
+    def pre_inv_process(self, preview: bool = False):
         ep = self.edit_params
 
         def current():
-            self.rotation_inter = rotate_image(self.source_image_small,
+            if preview:
+                self.rotation_inter = self.source_image_small
+            else:
+                self.rotation_inter = self.source_image
+            if ep.ffc_image:
+                if preview:
+                    self.rotation_inter = apply_ffc(self.rotation_inter,
+                                                    self.ffc_image_small)
+                else:
+                    self.rotation_inter = apply_ffc(self.rotation_inter,
+                                                    self.ffc_image)
+            self.rotation_inter = rotate_image(self.rotation_inter,
                                                ep.rotation)
             # shift analysis bounds based on image rotation
             if ep.rotation % 2:
@@ -75,16 +91,16 @@ class ProcessingPipeline(QObject):
                 self.update_analysis_bounds(self.raw_height, self.raw_width)
             else:
                 self.update_analysis_bounds()
-            if ep.base_color_xy:
+            if ep.base_color is not None and ep.base_color.any():
                 wb_adjustment = white_balance(self.rotation_inter,
-                                              custom_wb_point=ep.base_color_xy)
+                                              rgb_value=ep.base_color)
                 self.pre_inv_inter = apply_gain(self.rotation_inter,
                                                 wb_adjustment['values'])
             else:
                 self.pre_inv_inter = self.rotation_inter
 
         def proceed():
-            self.inv_process()
+            self.inv_process(preview)
 
         thread = self.threadpool.instantiate_thread(current)
         self.threadpool.active_threads[thread.thread_id] = thread
@@ -92,7 +108,7 @@ class ProcessingPipeline(QObject):
         thread.signals.finished.connect(self.threadpool.remove_thread)
         self.threadpool.start(thread)
 
-    def inv_process(self):
+    def inv_process(self, preview: bool = False):
         ep = self.edit_params
 
         def current():
@@ -102,7 +118,7 @@ class ProcessingPipeline(QObject):
                 self.inv_inter = self.pre_inv_inter.copy()
 
         def proceed():
-            self.ratio_process()
+            self.ratio_process(preview)
 
         thread = self.threadpool.instantiate_thread(current)
         self.threadpool.active_threads[thread.thread_id] = thread
@@ -110,7 +126,7 @@ class ProcessingPipeline(QObject):
         thread.signals.finished.connect(self.threadpool.remove_thread)
         self.threadpool.start(thread)
 
-    def ratio_process(self):
+    def ratio_process(self, preview: bool = False):
         ep = self.edit_params
 
         def current():
@@ -137,7 +153,7 @@ class ProcessingPipeline(QObject):
                 self.ratio_inter = self.inv_inter.copy()
 
         def proceed():
-            self.grade_process()
+            self.grade_process(preview)
 
         thread = self.threadpool.instantiate_thread(current)
         self.threadpool.active_threads[thread.thread_id] = thread
@@ -145,7 +161,7 @@ class ProcessingPipeline(QObject):
         thread.signals.finished.connect(self.threadpool.remove_thread)
         self.threadpool.start(thread)
 
-    def grade_process(self):
+    def grade_process(self, preview: bool = False):
         ep = self.edit_params
 
         def current():
@@ -167,7 +183,7 @@ class ProcessingPipeline(QObject):
 
         def proceed():
             if ep.tonemap:
-                self.tonemap_process()
+                self.tonemap_process(preview)
             else:
                 self.previewUpdated.emit()
 
@@ -177,7 +193,7 @@ class ProcessingPipeline(QObject):
         thread.signals.finished.connect(self.threadpool.remove_thread)
         self.threadpool.start(thread)
 
-    def tonemap_process(self):
+    def tonemap_process(self, preview: bool = False):
         ep = self.edit_params
 
         def current():
@@ -192,15 +208,36 @@ class ProcessingPipeline(QObject):
         thread.signals.finished.connect(self.threadpool.remove_thread)
         self.threadpool.start(thread)
 
+    def save_final_image(self, output_folder: str = None):
+        ep = self.edit_params
+        final_path = ""
+
+        def current():
+            pass
+            # save_image(self.source_image, )
+
+        thread = self.threadpool.instantiate_thread(current)
+        self.threadpool.active_threads[thread.thread_id] = thread
+        thread.signals.finished.connect(self.threadpool.remove_thread)
+        self.threadpool.start(thread)
+
     def load_raw_file(self, image_path):
         # load raw image and resize it for the preview pane
         if image_path:
             # the function to be executed within a separate thread
             def init_func():
+                global PHOTO_INDEX
+
                 raw = load_raw_image(image_path).astype(np.float32) / 65535.0
-                height, width, _ = raw.shape
-                self.raw_width = width
-                self.raw_height = height
+                if image_path in PHOTO_INDEX:
+                    ref = PHOTO_INDEX[image_path]
+                    height, width = ref['height'], ref['width']
+                    self.raw_width = width
+                    self.raw_height = height
+                else:
+                    height, width, _ = raw.shape
+                    self.raw_width = width
+                    self.raw_height = height
                 if width > height:
                     self.preview_scale = self.max_preview_size / width
                 else:
@@ -209,15 +246,20 @@ class ProcessingPipeline(QObject):
                 scaled_raw = ndimage.zoom(raw, (self.preview_scale,
                                                 self.preview_scale, 1), order=0)
                 self.rawLoaded.emit(image_path)
-                return raw, scaled_raw
+                return raw, scaled_raw, image_path
 
             # the function to be executed upon thread completion
             def post_func(image_data_tuple):
+                global PHOTO_INDEX
                 self.source_image = image_data_tuple[0]
                 self.source_image_small = image_data_tuple[1]
-                self.edit_params = EditParams()
+                if image_data_tuple[2] in PHOTO_INDEX:
+                    ref = PHOTO_INDEX[image_data_tuple[2]]
+                    self.edit_params = ref['edit_params']
+                else:
+                    self.edit_params = EditParams()
                 self.editParamsUpdated.emit()
-                self.pre_inv_process()
+                self.pre_inv_process(preview=True)
 
             def error_func(e):
                 exctype, value, error = e
@@ -226,6 +268,31 @@ class ProcessingPipeline(QObject):
 
             # instantiate and run a thread
             # should split this out into its own function, surely
+            thread = self.threadpool.instantiate_thread(init_func)
+            self.threadpool.active_threads[thread.thread_id] = thread
+            thread.signals.result.connect(post_func)
+            thread.signals.error.connect(error_func)
+            thread.signals.finished.connect(self.threadpool.remove_thread)
+            self.threadpool.start(thread)
+
+    def load_ffc_file(self, image_path):
+        # load raw file for flat-field correction
+        if image_path:
+            def init_func():
+                raw = load_raw_image(image_path).astype(np.float32) / 65535.0
+                return raw
+
+            def post_func(image_data):
+                self.ffc_image = image_data
+                self.ffc_image_small = ndimage.zoom(image_data,
+                                                    (self.preview_scale,
+                                                     self.preview_scale, 1),
+                                                    order=0)
+
+            def error_func(e):
+                exctype, value, error = e
+                QMessageBox.critical(self, "Error processing FFC image!", error)
+
             thread = self.threadpool.instantiate_thread(init_func)
             self.threadpool.active_threads[thread.thread_id] = thread
             thread.signals.result.connect(post_func)
@@ -264,13 +331,13 @@ class ProcessingPipeline(QObject):
             picker.update_color(value)
         elif stage == Stage.RATIO:
             value = average_sample_point(self.inv_inter,
-                                        point_x, point_y, 8)
+                                         point_x, point_y, 8)
             picker.update_color(value)
         elif stage == Stage.GRADE:
             value = average_sample_point(self.ratio_inter,
-                                        point_x, point_y, 8)
+                                         point_x, point_y, 8)
             picker.update_color(value)
         else:
             value = average_sample_point(self.grade_inter,
-                                        point_x, point_y, 8)
+                                         point_x, point_y, 8)
             picker.update_color(value)

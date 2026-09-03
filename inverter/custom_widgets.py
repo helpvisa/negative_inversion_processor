@@ -40,7 +40,7 @@ class ImageView(QGraphicsView):
     @Slot()
     def disable_pick_mode(self):
         self.set_pick_mode(False)
-    
+
     def set_pick_mode(self, enabled: bool):
         self._pick_mode = enabled
         if self._pick_mode:
@@ -365,7 +365,7 @@ class ColorPicker(QWidget):
     def update_color(self, color: tuple[float, float, float]):
         if color is not None and color[0] and color[1] and color[2]:
             self._color = color
-            label_value = np.round(color, decimals=2)
+            label_value = "    "
             # get final sRGB colour to use for preview
             sRGB_color, _ = convert_to_sRGB(color)
             color_clipped = np.clip(sRGB_color, max=1.0, min=0.0) * 255

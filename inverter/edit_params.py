@@ -14,7 +14,8 @@ class Stage(IntEnum):
 
 @dataclass
 class EditParams:
-    # rotate / crop the current image
+    # correct the current image
+    ffc_image: str = None
     rotation: int = 0
     crop_inset: float = 100.0
 

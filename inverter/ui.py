@@ -268,6 +268,8 @@ class EditingDisplay(QWidget):
         ip.view.pointPicked.connect(tp.lo_gray_picker.finish_pick)
         ip.view.pointPicked.connect(tp.hi_gray_picker.finish_pick)
         ip.view.pointPicked.connect(tp.grading_wb_picker.finish_pick)
+        # update grading panel if grading wb picked
+        tp.grading_wb_picker.colorChanged.connect(self.update_grading_panel)
         # update_edit_params on change of any subvalue of ToolPanel
         for tool in tp.tools:
             if hasattr(tool, "clicked"):
@@ -281,6 +283,12 @@ class EditingDisplay(QWidget):
         ep.rotation = ep.rotation + direction
         if PIPELINE:
             PIPELINE.process_image(ep.copy())
+
+    def update_grading_panel(self, color):
+        tp = self.tool_panel
+        tp.red_tune_slider.setValue(color[1] - color[0])
+        tp.green_tune_slider.setValue(color[1] - color[1])
+        tp.blue_tune_slider.setValue(color[1] - color[2])
 
     def update_edit_params(self):
         global PIPELINE

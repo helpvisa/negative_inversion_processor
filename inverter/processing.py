@@ -128,7 +128,7 @@ def average_sample_point(image_data, sample_x, sample_y, kernel):
                (x > 0 and x < image_data.shape[1]):
                 average += image_data[y, x]
     return average / (kernel * kernel)
-    
+
 
 def invert_to_density(image_data):
     """
@@ -209,7 +209,7 @@ def shift_blacks(image_data, analysis_inset):
 
 
 def white_balance(image_data, region=None, colourspace_weights=None,
-                  custom_wb_point=None, mode='mult'):
+                  rgb_value: tuple = None, custom_wb_point=None, mode='mult'):
     """
     White balance a "brightest point" visible within the bounding box of the
     provided region. This becomes the inverted film's new "black point".
@@ -219,7 +219,9 @@ def white_balance(image_data, region=None, colourspace_weights=None,
     Return a dictionary reprsenting the type of adjustment and its values.
     """
     max_rgb_values = None
-    if custom_wb_point:
+    if rgb_value is not None and rgb_value.any():
+        max_rgb_values = rgb_value
+    elif custom_wb_point:
         print(f"CUSTOM: Custom balance point: {custom_wb_point}",
               file=sys.stderr)
         max_rgb_values = average_sample_point(image_data,
@@ -264,14 +266,13 @@ def density_balance(image_data, region=None, exponent=1.5, ref_point_in=None,
     ref_in = None
     # introduce facility to use a baseline value from another image here?
     if ref_point_in:
-        print(f"CUSTOM: Custom reference point: {ref_point_in}",
+        print(f"CUSTOM: Custom pivot point: {ref_point_in}",
               file=sys.stderr)
-        ref_in = image_data[ref_point_in[1], ref_point_in[0]]
+        green_in = image_data[ref_point_in[1], ref_point_in[0], 1]
+        ref_in = [green_in, green_in, green_in]
     else:
         ref_in = np.array([pivot, pivot, pivot])
     # target output value (ref_in -> ref_out)
-    # eventually, we will want to make this tweakable instead of
-    # tweaking the post-inversion exposure with gain
     ref_out = np.array([out_brightness, out_brightness, out_brightness])
     # use ratios to determine channel exponents
     rexp = red_ratio * exponent
