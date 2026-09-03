@@ -18,7 +18,7 @@ def load_raw_image(path):
                                output_color=rawpy.ColorSpace.Rec2020)
 
 
-def save_image(image_data, output_path, tiff_format, icc_profile):
+def save_image(image_data, output_path, tiff_format='f16', icc_profile=None):
     # default case; save as f32 (input format from processing pipeline)
     image_to_save = image_data
     # set predictor if floating point (default)
@@ -33,6 +33,8 @@ def save_image(image_data, output_path, tiff_format, icc_profile):
         p_val = None
     elif tiff_format == "f16":
         image_to_save = image_data.astype(np.float16)
+    elif tiff_format == "f32":
+        image_to_save = image_data.astype(np.float32)
     tifffile.imwrite(output_path,
                      image_to_save,
                      compression="zlib",

@@ -7,6 +7,8 @@
 #         - inversion
 #         - grading
 #         - final
+import sys
+from pathlib import Path
 import numpy as np
 from scipy import ndimage
 from PySide6.QtCore import QObject, Signal, Slot
@@ -37,6 +39,7 @@ class ProcessingPipeline(QObject):
         self.threadpool = WorkerThreadPool()
         self.edit_params = EditParams()
         self.analysis_inset = analysis_inset
+        self.currently_loaded_filename = None
         self.raw_width = 0
         self.raw_height = 0
         self.auto_analysis_bounds = None
@@ -61,8 +64,11 @@ class ProcessingPipeline(QObject):
     def process_image(self, new_edit_params):
         difference = DeepDiff(self.edit_params, new_edit_params)
         if difference:
-            print(difference)
+            global PHOTO_INDEX
+            print(difference, file=sys.stderr)
             self.edit_params = new_edit_params
+            # update the global photo index
+            PHOTO_INDEX[self.currently_loaded_filename]['edit_params'] = self.edit_params
             # eventually, we check the difference to update only where
             # a change has actually occurred
             changes = difference['values_changed']
@@ -210,13 +216,55 @@ class ProcessingPipeline(QObject):
 
     def save_final_image(self, output_folder: str = None):
         ep = self.edit_params
-        final_path = ""
+        original_path = Path(self.currently_loaded_filename)
+        output_path = Path(output_folder)
+        final_path = output_path / original_path.with_suffic(".tiff").name
+        print(f"Saving final output to {final_path}.", file=sys.stderr)
 
-        def current():
-            pass
-            # save_image(self.source_image, )
+        def process_and_save():
+            working_image = self.source_image
+            # pre-inversion
+            ffc_image = ep.ffc_image if self.ffc_image else None
+            if ffc_image:
+                working_image = apply_ffc(working_image, ffc_image)
+            working_image = rotate_image(working_image, ep.rotation)
+            if ep.base_color is not None and ep.base_color.any():
+                wb_adjustment = white_balance(working_image,
+                                              rgb_value=ep.base_color)
+                working_image = apply_gain(working_image,
+                                           wb_adjustment['values'])
+            # inversion & ratio
+            if not ep.skip_inversion:
+                working_image = invert_to_density(working_image)
+                red_ratio = ep.red_ratio
+                blue_ratio = ep.blue_ratio
+                if ep.bw_mode:
+                    red_ratio = 1.0
+                    blue_ratio = 1.0
+                scale, shift = density_balance(working_image,
+                                               exponent=ep.green_exponent,
+                                               red_ratio=red_ratio,
+                                               blue_ratio=blue_ratio,
+                                               pivot=ep.pivot,
+                                               out_brightness=ep.out_brightness)
+                working_image = apply_gain(working_image, scale['values'])
+                working_image = apply_addition(working_image, shift['values'])
+            # grade
+            if not ep.bw_mode:
+                gain_tuple = (ep.red_gain, ep.green_gain, ep.blue_gain)
+                working_image = apply_gain(working_image, gain_tuple)
+                add_tuple = (ep.wb_red, ep.wb_green, ep.wb_blue)
+                working_image = apply_addition(working_image, add_tuple)
+            if not ep.skip_inversion:
+                working_image = density_to_luminance(working_image)
+            if ep.bw_mode:
+                working_image = convert_to_grayscale_from_g(working_image)
+            # tonemap
+            if ep.tonemap:
+                working_image = aces_tonemap(working_image, ep.toe)
+            save_image(working_image, final_path, 'f16')
 
-        thread = self.threadpool.instantiate_thread(current)
+        thread = self.threadpool.instantiate_thread(process_and_save)
         self.threadpool.active_threads[thread.thread_id] = thread
         thread.signals.finished.connect(self.threadpool.remove_thread)
         self.threadpool.start(thread)
@@ -227,8 +275,8 @@ class ProcessingPipeline(QObject):
             # the function to be executed within a separate thread
             def init_func():
                 global PHOTO_INDEX
-
                 raw = load_raw_image(image_path).astype(np.float32) / 65535.0
+                self.currently_loaded_filename = image_path
                 if image_path in PHOTO_INDEX:
                     ref = PHOTO_INDEX[image_path]
                     height, width = ref['height'], ref['width']
@@ -238,6 +286,10 @@ class ProcessingPipeline(QObject):
                     height, width, _ = raw.shape
                     self.raw_width = width
                     self.raw_height = height
+                    PHOTO_INDEX[image_path] = {
+                        "width": width,
+                        "height": height,
+                    }
                 if width > height:
                     self.preview_scale = self.max_preview_size / width
                 else:
@@ -251,13 +303,18 @@ class ProcessingPipeline(QObject):
             # the function to be executed upon thread completion
             def post_func(image_data_tuple):
                 global PHOTO_INDEX
+                # we know it must exist now, since previous func added it
+                name = image_data_tuple[2]
+                ref = PHOTO_INDEX[name]
                 self.source_image = image_data_tuple[0]
                 self.source_image_small = image_data_tuple[1]
-                if image_data_tuple[2] in PHOTO_INDEX:
-                    ref = PHOTO_INDEX[image_data_tuple[2]]
+                if "edit_params" in ref:
+                    print(f"Loading edit_params from memory for {name}.",
+                          file=sys.stderr)
                     self.edit_params = ref['edit_params']
                 else:
                     self.edit_params = EditParams()
+                    ref["edit_params"] = self.edit_params
                 self.editParamsUpdated.emit()
                 self.pre_inv_process(preview=True)
 
