@@ -13,6 +13,7 @@ from custom_widgets import ImageView, LabeledSlider, ColorPicker
 from colour_management import convert_to_sRGB
 from edit_params import EditParams, Stage
 from pipeline import ProcessingPipeline
+from processing import estimate_inversion_ratios
 from global_vars import GLOBAL_FLAGS, PHOTO_INDEX
 
 
@@ -126,6 +127,8 @@ class ToolPanel(QWidget):
         checkbox_layout.addWidget(self.bw_checkbox)
         self.pivot_slider = LabeledSlider("Pivot",
                                           0.0, 2.0, 0.745, 300)
+        self.pivot_picker = ColorPicker("Estimate Pivot from Point", Stage.RATIO,
+                                        hide_value=True)
         self.red_ratio_slider = LabeledSlider("Red Ratio",
                                               0.0, 3.0, 1.36, 300,
                                               "#ffcccc")
@@ -140,6 +143,7 @@ class ToolPanel(QWidget):
         self.hi_gray_picker = ColorPicker("High Gray", Stage.INV)
         inversion_layout.addLayout(checkbox_layout)
         inversion_layout.addWidget(self.pivot_slider)
+        inversion_layout.addWidget(self.pivot_picker)
         inversion_layout.addWidget(self.red_ratio_slider)
         inversion_layout.addWidget(self.blue_ratio_slider)
         inversion_layout.addWidget(self.contrast_slider)
@@ -152,6 +156,7 @@ class ToolPanel(QWidget):
         self.tools.extend([self.skip_inversion_checkbox,
                            self.bw_checkbox,
                            self.pivot_slider,
+                           self.pivot_picker,
                            self.red_ratio_slider,
                            self.blue_ratio_slider,
                            self.contrast_slider,
@@ -191,7 +196,7 @@ class ToolPanel(QWidget):
                                              hide_value=True)
         self.tonemap_checkbox = QCheckBox("Apply Tonemapping")
         self.toe_slider = LabeledSlider("Toe",
-                                        -0.5, 0.5, 0.0, 300)
+                                        -2.0, 1.0, 0.0, 400)
         custom_grading_layout.addLayout(grading_gain_layout)
         custom_grading_layout.addLayout(grading_tune_layout)
         custom_grading_layout.addWidget(self.grading_wb_picker)
@@ -282,6 +287,8 @@ class EditingDisplay(QWidget):
         # allow pickers to trigger picker mode
         tp.pre_inv_wb_picker.pickRequested.connect(ip.view.enable_pick_mode)
         tp.pre_inv_wb_picker.valueChanged.connect(PIPELINE.pick_color_from_image)
+        tp.pivot_picker.pickRequested.connect(ip.view.enable_pick_mode)
+        tp.pivot_picker.valueChanged.connect(PIPELINE.pick_color_from_image)
         tp.lo_gray_picker.pickRequested.connect(ip.view.enable_pick_mode)
         tp.lo_gray_picker.valueChanged.connect(PIPELINE.pick_color_from_image)
         tp.hi_gray_picker.pickRequested.connect(ip.view.enable_pick_mode)
@@ -289,12 +296,18 @@ class EditingDisplay(QWidget):
         tp.grading_wb_picker.pickRequested.connect(ip.view.enable_pick_mode)
         tp.grading_wb_picker.valueChanged.connect(PIPELINE.pick_color_from_image)
         # allow view to send values back
+        ip.view.pointPicked.connect(tp.pivot_picker.finish_pick)
         ip.view.pointPicked.connect(tp.pre_inv_wb_picker.finish_pick)
         ip.view.pointPicked.connect(tp.lo_gray_picker.finish_pick)
         ip.view.pointPicked.connect(tp.hi_gray_picker.finish_pick)
         ip.view.pointPicked.connect(tp.grading_wb_picker.finish_pick)
+        # update pivot if pivot picked
+        tp.pivot_picker.colorChanged.connect(self.update_pivot)
         # update grading panel if grading wb picked
         tp.grading_wb_picker.colorChanged.connect(self.update_grading_panel)
+        # update ratios with estimate if possible
+        tp.lo_gray_picker.colorChanged.connect(self.estimate_ratios)
+        tp.hi_gray_picker.colorChanged.connect(self.estimate_ratios)
         # update_edit_params on change of any subvalue of ToolPanel
         for tool in tp.tools:
             if hasattr(tool, "clicked"):
@@ -309,11 +322,25 @@ class EditingDisplay(QWidget):
         if PIPELINE:
             PIPELINE.process_image(ep.copy())
 
+    def update_pivot(self, color):
+        tp = self.tool_panel
+        tp.pivot_slider.setValue(color[1])
+
     def update_grading_panel(self, color):
         tp = self.tool_panel
         tp.red_tune_slider.setValue(color[1] - color[0])
         tp.green_tune_slider.setValue(color[1] - color[1])
         tp.blue_tune_slider.setValue(color[1] - color[2])
+
+    def estimate_ratios(self, color):
+        tp = self.tool_panel
+        lo = tp.lo_gray_picker.colorValue()
+        hi = tp.hi_gray_picker.colorValue()
+        if lo is not None and lo.any() and hi is not None and hi.any():
+            red_ratio, blue_ratio = estimate_inversion_ratios(lo, hi)
+            tp.red_ratio_slider.setValue(red_ratio)
+            tp.blue_ratio_slider.setValue(blue_ratio)
+           
 
     def copy_parameters(self):
         global CLIPBOARD

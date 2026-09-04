@@ -132,6 +132,19 @@ def average_sample_point(image_data, sample_x, sample_y, kernel):
     return average / (kernel * kernel)
 
 
+def estimate_inversion_ratios(low_density: tuple = (float, float, float),
+                              high_density: tuple = (float, float, float)):
+    # insurance policy: swap low and high if they are inverted
+    if low_density[1] > high_density[1]:
+        temp = high_density.copy()
+        high_density = low_density.copy()
+        low_density = temp
+    green_ratio = high_density[1] - low_density[1]
+    red_ratio = (high_density[0] - low_density[0]) / green_ratio
+    blue_ratio = (high_density[2] - low_density[2]) / green_ratio
+    return red_ratio, blue_ratio
+
+
 def invert_to_density(image_data):
     """
     Invert a given film negative into a logarithmic density space where it can
