@@ -24,7 +24,7 @@ from processing import (load_raw_image, save_image, rotate_image,
                         apply_addition, apply_gain, apply_ffc)
 from custom_widgets import ColorPicker
 from colour_management import noritsu_tonemap, aces_tonemap, convert_to_sRGB
-from sidecars import load_params_from_sidecar
+from sidecars import update_sidecar, load_params_from_sidecar
 from global_vars import PHOTO_INDEX
 
 

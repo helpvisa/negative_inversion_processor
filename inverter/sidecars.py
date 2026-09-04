@@ -53,38 +53,41 @@ def load_params_from_sidecar(filepath):
         # load sidecar
         load_path = filepath + ".nip.json"
         ep = EditParams()
-        with open(load_path, 'r') as f:
-            sidecar = json.loads(f.read())
-            ep.ffc_image = sidecar['ffc_image']
-            ep.rotation = sidecar['rotation']
-            ep.crop_inset = sidecar['crop_inset']
-            ep.skip_inversion = sidecar['skip_inversion']
-            ep.bw_mode = sidecar['bw_mode']
-            bc_xy_list = sidecar['base_color_xy']
-            bc_xy_tuple = (bc_xy_list[0], bc_xy_list[1]) if bc_xy_list else None
-            ep.base_color_xy = bc_xy_tuple
-            bc_list = sidecar['base_color']
-            bc_tuple = np.array([bc_list[0], bc_list[1], bc_list[2]]) if bc_list else None
-            ep.base_color = bc_tuple
-            ep.pivot = sidecar['pivot']
-            ep.red_ratio = sidecar['red_ratio']
-            ep.blue_ratio = sidecar['blue_ratio']
-            ep.green_exponent = sidecar['green_exponent']
-            ep.out_brightness = sidecar['out_brightness']
-            ep.red_gain = sidecar['red_gain']
-            ep.green_gain = sidecar['green_gain']
-            ep.blue_gain = sidecar['blue_gain']
-            wb_xy_list = sidecar['wb_xy']
-            wb_xy_tuple = (wb_xy_list[0], wb_xy_list[1]) if wb_xy_list else None
-            ep.wb_xy = wb_xy_tuple
-            wb_list = sidecar['wb_reference']
-            wb_tuple = np.array([wb_list[0], wb_list[1], wb_list[2]]) if wb_list else None
-            ep.wb_reference = sidecar['wb_reference']
-            ep.wb_red = sidecar['wb_red']
-            ep.wb_green = sidecar['wb_green']
-            ep.wb_blue = sidecar['wb_blue']
-            ep.tonemap = sidecar['tonemap']
-            ep.toe = sidecar['toe']
+        try:
+            with open(load_path, 'r') as f:
+                sidecar = json.loads(f.read())
+                ep.ffc_image = sidecar['ffc_image']
+                ep.rotation = sidecar['rotation']
+                ep.crop_inset = sidecar['crop_inset']
+                ep.skip_inversion = sidecar['skip_inversion']
+                ep.bw_mode = sidecar['bw_mode']
+                bc_xy_list = sidecar['base_color_xy']
+                bc_xy_tuple = (bc_xy_list[0], bc_xy_list[1]) if bc_xy_list else None
+                ep.base_color_xy = bc_xy_tuple
+                bc_list = sidecar['base_color']
+                bc_tuple = np.array([bc_list[0], bc_list[1], bc_list[2]]) if bc_list else None
+                ep.base_color = bc_tuple
+                ep.pivot = sidecar['pivot']
+                ep.red_ratio = sidecar['red_ratio']
+                ep.blue_ratio = sidecar['blue_ratio']
+                ep.green_exponent = sidecar['green_exponent']
+                ep.out_brightness = sidecar['out_brightness']
+                ep.red_gain = sidecar['red_gain']
+                ep.green_gain = sidecar['green_gain']
+                ep.blue_gain = sidecar['blue_gain']
+                wb_xy_list = sidecar['wb_xy']
+                wb_xy_tuple = (wb_xy_list[0], wb_xy_list[1]) if wb_xy_list else None
+                ep.wb_xy = wb_xy_tuple
+                wb_list = sidecar['wb_reference']
+                wb_tuple = np.array([wb_list[0], wb_list[1], wb_list[2]]) if wb_list else None
+                ep.wb_reference = sidecar['wb_reference']
+                ep.wb_red = sidecar['wb_red']
+                ep.wb_green = sidecar['wb_green']
+                ep.wb_blue = sidecar['wb_blue']
+                ep.tonemap = sidecar['tonemap']
+                ep.toe = sidecar['toe']
+        except FileNotFoundError:
+            print(f"No sidebar file found. Returning blank edit params.")
     else:
         print(f"No file path specified.", file=sys.stderr)
     return ep
