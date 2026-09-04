@@ -13,7 +13,7 @@ from custom_widgets import ImageView, LabeledSlider, ColorPicker
 from colour_management import convert_to_sRGB
 from edit_params import EditParams, Stage
 from pipeline import ProcessingPipeline
-from processing import estimate_inversion_ratios, convert_to_grayscale
+from processing import estimate_inversion_ratios
 from global_vars import GLOBAL_FLAGS, PHOTO_INDEX, REC2020_WEIGHTS
 
 
@@ -127,8 +127,8 @@ class ToolPanel(QWidget):
         checkbox_layout.addWidget(self.bw_checkbox)
         self.pivot_slider = LabeledSlider("Pivot",
                                           0.0, 2.0, 0.745, 300)
-        self.pivot_picker = ColorPicker("Pick Pivot from Film Base", Stage.RATIO,
-                                        hide_value=True)
+        # self.pivot_picker = ColorPicker("Pick Pivot from Film Base", Stage.RATIO,
+        #                                 hide_value=True)
         self.red_ratio_slider = LabeledSlider("Red Ratio",
                                               0.0, 3.0, 1.36, 300,
                                               "#ffcccc")
@@ -141,7 +141,7 @@ class ToolPanel(QWidget):
                                                    0.0, 3.0, 0.745, 300)
         self.estimate_ratios_button = QPushButton("Estimate Ratios (Crop-Dependent)")
         inversion_layout.addLayout(checkbox_layout)
-        inversion_layout.addWidget(self.pivot_picker)
+        # inversion_layout.addWidget(self.pivot_picker)
         inversion_layout.addWidget(self.pivot_slider)
         inversion_layout.addWidget(self.red_ratio_slider)
         inversion_layout.addWidget(self.blue_ratio_slider)
@@ -151,8 +151,8 @@ class ToolPanel(QWidget):
         inversion_groupbox.setLayout(inversion_layout)
         self.tools.extend([self.skip_inversion_checkbox,
                            self.bw_checkbox,
+                           # self.pivot_picker,
                            self.pivot_slider,
-                           self.pivot_picker,
                            self.red_ratio_slider,
                            self.blue_ratio_slider,
                            self.estimate_ratios_button,
@@ -283,16 +283,16 @@ class EditingDisplay(QWidget):
         # allow pickers to trigger picker mode
         tp.pre_inv_wb_picker.pickRequested.connect(ip.view.enable_pick_mode)
         tp.pre_inv_wb_picker.valueChanged.connect(PIPELINE.pick_color_from_image)
-        tp.pivot_picker.pickRequested.connect(ip.view.enable_pick_mode)
-        tp.pivot_picker.valueChanged.connect(PIPELINE.pick_color_from_image)
+        # tp.pivot_picker.pickRequested.connect(ip.view.enable_pick_mode)
+        # tp.pivot_picker.valueChanged.connect(PIPELINE.pick_color_from_image)
         tp.grading_wb_picker.pickRequested.connect(ip.view.enable_pick_mode)
         tp.grading_wb_picker.valueChanged.connect(PIPELINE.pick_color_from_image)
         # allow view to send values back
-        ip.view.pointPicked.connect(tp.pivot_picker.finish_pick)
+        # ip.view.pointPicked.connect(tp.pivot_picker.finish_pick)
         ip.view.pointPicked.connect(tp.pre_inv_wb_picker.finish_pick)
         ip.view.pointPicked.connect(tp.grading_wb_picker.finish_pick)
         # update pivot if pivot picked
-        tp.pivot_picker.colorChanged.connect(self.update_pivot)
+        # tp.pivot_picker.colorChanged.connect(self.update_pivot)
         # update grading panel if grading wb picked
         tp.grading_wb_picker.colorChanged.connect(self.update_grading_panel)
         # update_edit_params on change of any subvalue of ToolPanel
@@ -309,10 +309,11 @@ class EditingDisplay(QWidget):
         if PIPELINE:
             PIPELINE.process_image(ep.copy())
 
-    def update_pivot(self, color):
-        tp = self.tool_panel
-        density = convert_to_grayscale(color, REC2020_WEIGHTS)
-        tp.pivot_slider.setValue(density)
+    # def update_pivot(self, color):
+    #     tp = self.tool_panel
+    #     density = (color[1])
+    #     tp.pivot_slider.setValue(density)
+    #     tp.out_brightness_slider.setValue(density)
 
     def update_grading_panel(self, color):
         tp = self.tool_panel
@@ -332,6 +333,7 @@ class EditingDisplay(QWidget):
             tp.red_ratio_slider.setValue(red_ratio)
             tp.blue_ratio_slider.setValue(blue_ratio)
             tp.pivot_slider.setValue(PIPELINE.min_percentile[1])
+            tp.out_brightness_slider.setValue(PIPELINE.min_percentile[1])
            
 
     def copy_parameters(self):
