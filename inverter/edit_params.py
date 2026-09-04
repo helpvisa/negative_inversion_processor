@@ -2,6 +2,7 @@ import copy
 from enum import IntEnum
 from dataclasses import dataclass
 from typing import Optional, Tuple
+import numpy.typing as npt
 
 
 class Stage(IntEnum):
@@ -24,7 +25,7 @@ class EditParams:
     bw_mode: bool = False
     # xy coord for sampling base colour of film
     base_color_xy: Optional[Tuple[int, int]] = None
-    base_color: Optional[Tuple[float, float, float]] = None
+    base_color: Optional[npt.NDArray[Tuple[float, float, float]]] = None
     # inversion points and ratios
     pivot: float = 0.745
     red_ratio: float = 1.36
@@ -38,7 +39,7 @@ class EditParams:
     blue_gain: float = 1.0
     # wb picker
     wb_xy: Optional[Tuple[int, int]] = None
-    wb_reference: Optional[Tuple[float, float, float]] = None
+    wb_reference: Optional[npt.NDArray[Tuple[float, float, float]]] = None
     # with rgb values for additional fine-tuning
     wb_red: float = 0.0
     wb_green: float = 0.0

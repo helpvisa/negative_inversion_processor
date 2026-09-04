@@ -24,6 +24,7 @@ from processing import (load_raw_image, save_image, rotate_image,
                         apply_addition, apply_gain, apply_ffc)
 from custom_widgets import ColorPicker
 from colour_management import noritsu_tonemap, aces_tonemap, convert_to_sRGB
+from sidecars import load_params_from_sidecar
 from global_vars import PHOTO_INDEX
 
 
@@ -67,6 +68,7 @@ class ProcessingPipeline(QObject):
     def process_image(self, new_edit_params):
         difference = DeepDiff(self.edit_params, new_edit_params)
         if difference:
+            update_sidecar(self.currently_loaded_filename)
             print(difference, file=sys.stderr)
             self.edit_params = new_edit_params
             # update the global photo index
@@ -339,7 +341,9 @@ class ProcessingPipeline(QObject):
                           file=sys.stderr)
                     self.edit_params = ref['edit_params']
                 else:
-                    self.edit_params = EditParams()
+                    print(f"Loading edit_params from sidecar for {name}.",
+                          file=sys.stderr)
+                    self.edit_params = load_params_from_sidecar(name)
                     ref["edit_params"] = self.edit_params
                 self.editParamsUpdated.emit()
                 self.pre_inv_process(preview=True)

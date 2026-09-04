@@ -349,7 +349,7 @@ class EditingDisplay(QWidget):
             self.set_edit_params_from_pipeline()
 
     def update_edit_params(self):
-        global PIPELINE
+        global PIPELINE, LOADED_RAW_PATH
         ep = self.edit_params
         tp = self.tool_panel
         ep.crop_inset = tp.crop_inset_slider.value()
