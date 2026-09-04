@@ -6,7 +6,8 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget,
                                QVBoxLayout, QHBoxLayout,
                                QLabel, QPushButton, QFileDialog,
                                QGraphicsScene, QSplitter,
-                               QCheckBox, QGroupBox, QScrollArea)
+                               QCheckBox, QGroupBox, QScrollArea,
+                               QSizePolicy)
 from custom_widgets import ImageView, LabeledSlider, ColorPicker
 from colour_management import convert_to_sRGB
 from edit_params import EditParams, Stage
@@ -90,16 +91,20 @@ class ToolPanel(QWidget):
         # --- pre-inversion layout (orientation and initial white balance)
         pre_inversion_groupbox = QGroupBox("Pre-Inversion")
         pre_inversion_layout = QVBoxLayout()
+        self.crop_inset_slider = LabeledSlider("Crop Inset",
+                                               0.0, 1.0, 1.0, 300)
         self.pre_inv_orientation_layout = QHBoxLayout()
         self.pre_inv_rotate_left = QPushButton("Rotate Left")
         self.pre_inv_rotate_right = QPushButton("Rotate Right")
         self.pre_inv_orientation_layout.addWidget(self.pre_inv_rotate_left)
         self.pre_inv_orientation_layout.addWidget(self.pre_inv_rotate_right)
         self.pre_inv_wb_picker = ColorPicker("Dmin - Base Color", Stage.PRE_INV)
+        pre_inversion_layout.addWidget(self.crop_inset_slider)
         pre_inversion_layout.addLayout(self.pre_inv_orientation_layout)
         pre_inversion_layout.addWidget(self.pre_inv_wb_picker)
         pre_inversion_groupbox.setLayout(pre_inversion_layout)
-        self.tools.extend([self.pre_inv_rotate_left,
+        self.tools.extend([self.crop_inset_slider,
+                           self.pre_inv_rotate_left,
                            self.pre_inv_rotate_right,
                            self.pre_inv_wb_picker])
         # --- inversion tools layout
@@ -113,7 +118,7 @@ class ToolPanel(QWidget):
         checkbox_layout.addWidget(self.skip_inversion_checkbox)
         checkbox_layout.addWidget(self.bw_checkbox)
         self.pivot_slider = LabeledSlider("Pivot",
-                                          0.0, 1.0, 0.745, 300)
+                                          0.0, 2.0, 0.745, 300)
         self.red_ratio_slider = LabeledSlider("Red Ratio",
                                               0.0, 3.0, 1.36, 300,
                                               "#ffcccc")
@@ -217,6 +222,7 @@ class EditingDisplay(QWidget):
         # demo controls
         self.current_file_label = QLabel("NO FILE LOADED")
         self.load_button = QPushButton("Load Image")
+        self.save_button = QPushButton("Save Processed Image")
         # actual side panel
         self.scrollable_sidebar = QScrollArea()
         self.scrollable_sidebar.setWidgetResizable(True)
@@ -224,22 +230,28 @@ class EditingDisplay(QWidget):
         self.scrollable_sidebar.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.tool_panel = ToolPanel()
         self.scrollable_sidebar.setWidget(self.tool_panel)
+        # statusbar
+        self.statusbar = QLabel("No status to display.")
+        self.statusbar.setSizePolicy(QSizePolicy.Policy.Preferred,
+                                     QSizePolicy.Policy.Fixed)
 
         # define layouts
         # top-level layout
         self.layout = QVBoxLayout()
         # file layout
-        self.load_layout = QHBoxLayout()
-        self.load_layout.addWidget(self.current_file_label)
-        self.load_layout.addWidget(self.load_button)
+        self.headerbar_layout = QHBoxLayout()
+        self.headerbar_layout.addWidget(self.current_file_label)
+        self.headerbar_layout.addWidget(self.load_button)
+        self.headerbar_layout.addWidget(self.save_button)
         # editing layout
         self.editing_layout = QSplitter(Qt.Horizontal)
         self.editing_layout.setHandleWidth(16)
         self.editing_layout.addWidget(self.image_preview)
         self.editing_layout.addWidget(self.scrollable_sidebar)
         # add all layouts and wrap it all up
-        self.layout.addLayout(self.load_layout)
+        self.layout.addLayout(self.headerbar_layout)
         self.layout.addWidget(self.editing_layout)
+        self.layout.addWidget(self.statusbar)
         self.setLayout(self.layout)
 
         # wiring up functions
@@ -248,6 +260,7 @@ class EditingDisplay(QWidget):
         ip = self.image_preview
         # ep = self.edit_params
         self.load_button.clicked.connect(self.open_load_dialog)
+        self.save_button.clicked.connect(self.open_save_dialog)
         PIPELINE.rawLoaded.connect(self.update_current_filename_display)
         tp.pre_inv_rotate_left.clicked.connect(lambda: self.update_rotation(1))
         tp.pre_inv_rotate_right.clicked.connect(lambda: self.update_rotation(-1))
@@ -294,6 +307,7 @@ class EditingDisplay(QWidget):
         global PIPELINE
         ep = self.edit_params
         tp = self.tool_panel
+        ep.crop_inset = tp.crop_inset_slider.value()
         ep.skip_inversion = tp.skip_inversion_checkbox.isChecked()
         ep.bw_mode = tp.bw_checkbox.isChecked()
         ep.base_color_xy = tp.pre_inv_wb_picker.value()
@@ -324,6 +338,7 @@ class EditingDisplay(QWidget):
         self.edit_params = PIPELINE.edit_params.copy()
         ep = self.edit_params
         tp = self.tool_panel
+        tp.crop_inset_slider.setValue(ep.crop_inset)
         tp.skip_inversion_checkbox.setChecked(ep.skip_inversion)
         tp.bw_checkbox.setChecked(ep.bw_mode)
         tp.pre_inv_wb_picker.update_color(ep.base_color)
@@ -349,6 +364,12 @@ class EditingDisplay(QWidget):
         image_path, _ = QFileDialog.getOpenFileName()
         PIPELINE.load_raw_file(image_path)
         LOADED_RAW_PATH = image_path
+
+    def open_save_dialog(self):
+        global PIPELINE
+        image_folder = QFileDialog.getExistingDirectory()
+        print(image_folder, file=sys.stderr)
+        PIPELINE.save_final_image(image_folder)
 
     def update_current_filename_display(self, filename: str):
         self.current_file_label.setText(filename)
@@ -384,4 +405,9 @@ if __name__ == "__main__":
     app.setPalette(palette)
     window = MainWindow()
     window.show()
-    sys.exit(app.exec())
+    # wait for threads
+    exit_code = app.exec()
+    print("Waiting for all threads to finish!", file=sys.stderr)
+    PIPELINE.threadpool.waitForDone()
+    print("All threads finished; exiting!", file=sys.stderr)
+    sys.exit(exit_code)

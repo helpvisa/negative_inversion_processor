@@ -17,7 +17,7 @@ class EditParams:
     # correct the current image
     ffc_image: str = None
     rotation: int = 0
-    crop_inset: float = 100.0
+    crop_inset: float = 1.0
 
     # --- inversion parameters
     skip_inversion: bool = False

@@ -23,7 +23,7 @@ from processing import (load_raw_image, save_image, rotate_image,
                         convert_to_grayscale_from_g,
                         apply_addition, apply_gain, apply_ffc)
 from custom_widgets import ColorPicker
-from colour_management import aces_tonemap
+from colour_management import aces_tonemap, convert_to_sRGB
 from global_vars import PHOTO_INDEX
 
 
@@ -42,7 +42,6 @@ class ProcessingPipeline(QObject):
         self.currently_loaded_filename = None
         self.raw_width = 0
         self.raw_height = 0
-        self.auto_analysis_bounds = None
         self.ffc_image = None
         self.ffc_image_small = None
         self.source_image = None
@@ -64,7 +63,6 @@ class ProcessingPipeline(QObject):
     def process_image(self, new_edit_params):
         difference = DeepDiff(self.edit_params, new_edit_params)
         if difference:
-            global PHOTO_INDEX
             print(difference, file=sys.stderr)
             self.edit_params = new_edit_params
             # update the global photo index
@@ -78,6 +76,7 @@ class ProcessingPipeline(QObject):
         ep = self.edit_params
 
         def current():
+            # pick image size and apply ffc
             if preview:
                 self.rotation_inter = self.source_image_small
             else:
@@ -89,14 +88,20 @@ class ProcessingPipeline(QObject):
                 else:
                     self.rotation_inter = apply_ffc(self.rotation_inter,
                                                     self.ffc_image)
+            # apply crop inset
+            if ep.crop_inset < 1.0:
+                crop_height = int(self.raw_height * self.preview_scale * ep.crop_inset)
+                crop_width = int(self.raw_width * self.preview_scale * ep.crop_inset)
+                crop_start_y = int(self.raw_height * self.preview_scale - crop_height) // 2
+                crop_end_y = crop_start_y + crop_height
+                crop_start_x = int(self.raw_width * self.preview_scale - crop_width) // 2
+                crop_end_x = crop_start_x + crop_width
+                self.rotation_inter = self.rotation_inter[crop_start_y:crop_end_y,
+                                                          crop_start_x:crop_end_x]
+            # apply rotation
             self.rotation_inter = rotate_image(self.rotation_inter,
                                                ep.rotation)
-            # shift analysis bounds based on image rotation
-            if ep.rotation % 2:
-                # swizzle
-                self.update_analysis_bounds(self.raw_height, self.raw_width)
-            else:
-                self.update_analysis_bounds()
+            # apply white balance
             if ep.base_color is not None and ep.base_color.any():
                 wb_adjustment = white_balance(self.rotation_inter,
                                               rgb_value=ep.base_color)
@@ -218,7 +223,7 @@ class ProcessingPipeline(QObject):
         ep = self.edit_params
         original_path = Path(self.currently_loaded_filename)
         output_path = Path(output_folder)
-        final_path = output_path / original_path.with_suffic(".tiff").name
+        final_path = output_path / original_path.with_suffix(".tiff").name
         print(f"Saving final output to {final_path}.", file=sys.stderr)
 
         def process_and_save():
@@ -227,6 +232,16 @@ class ProcessingPipeline(QObject):
             ffc_image = ep.ffc_image if self.ffc_image else None
             if ffc_image:
                 working_image = apply_ffc(working_image, ffc_image)
+            # apply crop inset
+            if ep.crop_inset < 1.0:
+                crop_height = int(self.raw_height * ep.crop_inset)
+                crop_width = int(self.raw_width * ep.crop_inset)
+                crop_start_y = int(self.raw_height - crop_height) // 2
+                crop_end_y = crop_start_y + crop_height
+                crop_start_x = int(self.raw_width - crop_width) // 2
+                crop_end_x = crop_start_x + crop_width
+                working_image = working_image[crop_start_y:crop_end_y,
+                                              crop_start_x:crop_end_x]
             working_image = rotate_image(working_image, ep.rotation)
             if ep.base_color is not None and ep.base_color.any():
                 wb_adjustment = white_balance(working_image,
@@ -262,6 +277,8 @@ class ProcessingPipeline(QObject):
             # tonemap
             if ep.tonemap:
                 working_image = aces_tonemap(working_image, ep.toe)
+            # convert to sRGB; will provide option for custom colorspace soon
+            working_image, _ = convert_to_sRGB(working_image)
             save_image(working_image, final_path, 'f16')
 
         thread = self.threadpool.instantiate_thread(process_and_save)
@@ -274,7 +291,6 @@ class ProcessingPipeline(QObject):
         if image_path:
             # the function to be executed within a separate thread
             def init_func():
-                global PHOTO_INDEX
                 raw = load_raw_image(image_path).astype(np.float32) / 65535.0
                 self.currently_loaded_filename = image_path
                 if image_path in PHOTO_INDEX:
@@ -294,7 +310,6 @@ class ProcessingPipeline(QObject):
                     self.preview_scale = self.max_preview_size / width
                 else:
                     self.preview_scale = self.max_preview_size / height
-                self.update_analysis_bounds()
                 scaled_raw = ndimage.zoom(raw, (self.preview_scale,
                                                 self.preview_scale, 1), order=0)
                 self.rawLoaded.emit(image_path)
@@ -302,7 +317,6 @@ class ProcessingPipeline(QObject):
 
             # the function to be executed upon thread completion
             def post_func(image_data_tuple):
-                global PHOTO_INDEX
                 # we know it must exist now, since previous func added it
                 name = image_data_tuple[2]
                 ref = PHOTO_INDEX[name]
@@ -356,24 +370,6 @@ class ProcessingPipeline(QObject):
             thread.signals.error.connect(error_func)
             thread.signals.finished.connect(self.threadpool.remove_thread)
             self.threadpool.start(thread)
-
-    def update_analysis_bounds(self,
-                               width=None,
-                               height=None):
-        # replace width/height with self.raw_[w|h] if value not present
-        if not width:
-            width = self.raw_width
-        if not height:
-            height = self.raw_height
-        # determine auto-analysis bounds
-        a_width = int(width * self.analysis_inset * self.preview_scale)
-        a_height = int(height * self.analysis_inset * self.preview_scale)
-        a_start_x = int(width * self.preview_scale - a_width) // 2
-        a_end_x = a_start_x + a_width
-        a_start_y = int(height * self.preview_scale - a_height) // 2
-        a_end_y = a_start_y + a_height
-        self.auto_analysis_bounds = [[a_start_x, a_start_y],
-                                     [a_end_x, a_end_y]]
 
     @Slot()
     def pick_color_from_image(self, point_x, point_y,
