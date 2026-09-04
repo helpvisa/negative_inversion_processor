@@ -44,6 +44,8 @@ class ProcessingPipeline(QObject):
         self.currently_loaded_filename = None
         self.raw_width = 0
         self.raw_height = 0
+        self.min_percentile = None
+        self.max_percentile = None
         self.ffc_image = None
         self.ffc_image_small = None
         self.source_image = None
@@ -127,6 +129,11 @@ class ProcessingPipeline(QObject):
         def current():
             if not ep.skip_inversion:
                 self.inv_inter = invert_to_density(self.pre_inv_inter)
+                # calculate percentiles
+                # reshape flattens height, width into 1D pixel array
+                array_1d = self.inv_inter.reshape(-1, 3)
+                self.min_percentile = np.percentile(array_1d, 0.5, axis=0)
+                self.max_percentile = np.percentile(array_1d, 99.8, axis=0)
             else:
                 self.inv_inter = self.pre_inv_inter.copy()
 

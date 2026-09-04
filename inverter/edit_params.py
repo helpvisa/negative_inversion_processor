@@ -31,11 +31,6 @@ class EditParams:
     blue_ratio: float = 0.86
     green_exponent: float = 1.5
     out_brightness: float = 0.745
-    # pickers for estimating the ratios
-    lo_gray_xy: Optional[Tuple[int, int]] = None
-    lo_gray: Optional[Tuple[float, float, float]] = None
-    hi_gray_xy: Optional[Tuple[int, int]] = None
-    hi_gray: Optional[Tuple[float, float, float]] = None
 
     # --- final user grade
     red_gain: float = 1.0

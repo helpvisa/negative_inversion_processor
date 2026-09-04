@@ -13,8 +13,8 @@ from custom_widgets import ImageView, LabeledSlider, ColorPicker
 from colour_management import convert_to_sRGB
 from edit_params import EditParams, Stage
 from pipeline import ProcessingPipeline
-from processing import estimate_inversion_ratios
-from global_vars import GLOBAL_FLAGS, PHOTO_INDEX
+from processing import estimate_inversion_ratios, convert_to_grayscale
+from global_vars import GLOBAL_FLAGS, PHOTO_INDEX, REC2020_WEIGHTS
 
 
 # some global variables for tracking information about the current session
@@ -139,19 +139,15 @@ class ToolPanel(QWidget):
                                              0.0, 5.0, 1.5, 300)
         self.out_brightness_slider = LabeledSlider("Output Brightness",
                                                    0.0, 3.0, 0.745, 300)
-        self.lo_gray_picker = ColorPicker("Low Gray", Stage.INV)
-        self.hi_gray_picker = ColorPicker("High Gray", Stage.INV)
+        self.estimate_ratios_button = QPushButton("Estimate Ratios")
         inversion_layout.addLayout(checkbox_layout)
         inversion_layout.addWidget(self.pivot_slider)
         inversion_layout.addWidget(self.pivot_picker)
         inversion_layout.addWidget(self.red_ratio_slider)
         inversion_layout.addWidget(self.blue_ratio_slider)
+        inversion_layout.addWidget(self.estimate_ratios_button)
         inversion_layout.addWidget(self.contrast_slider)
         inversion_layout.addWidget(self.out_brightness_slider)
-        density_picker_layout = QHBoxLayout()
-        density_picker_layout.addWidget(self.lo_gray_picker)
-        density_picker_layout.addWidget(self.hi_gray_picker)
-        inversion_layout.addLayout(density_picker_layout)
         inversion_groupbox.setLayout(inversion_layout)
         self.tools.extend([self.skip_inversion_checkbox,
                            self.bw_checkbox,
@@ -159,10 +155,9 @@ class ToolPanel(QWidget):
                            self.pivot_picker,
                            self.red_ratio_slider,
                            self.blue_ratio_slider,
+                           self.estimate_ratios_button,
                            self.contrast_slider,
-                           self.out_brightness_slider,
-                           self.lo_gray_picker,
-                           self.hi_gray_picker])
+                           self.out_brightness_slider])
         # --- user grading
         custom_grading_groupbox = QGroupBox("Grading")
         custom_grading_layout = QVBoxLayout()
@@ -281,6 +276,7 @@ class EditingDisplay(QWidget):
         tp.paste_params_button.clicked.connect(self.paste_parameters)
         tp.pre_inv_rotate_left.clicked.connect(lambda: self.update_rotation(1))
         tp.pre_inv_rotate_right.clicked.connect(lambda: self.update_rotation(-1))
+        tp.estimate_ratios_button.clicked.connect(self.estimate_ratios)
         # this is super weird and fragile with many edge cases
         # i.e. two pickers can be activated at once
         # but I think I actually kinda like that?
@@ -289,25 +285,16 @@ class EditingDisplay(QWidget):
         tp.pre_inv_wb_picker.valueChanged.connect(PIPELINE.pick_color_from_image)
         tp.pivot_picker.pickRequested.connect(ip.view.enable_pick_mode)
         tp.pivot_picker.valueChanged.connect(PIPELINE.pick_color_from_image)
-        tp.lo_gray_picker.pickRequested.connect(ip.view.enable_pick_mode)
-        tp.lo_gray_picker.valueChanged.connect(PIPELINE.pick_color_from_image)
-        tp.hi_gray_picker.pickRequested.connect(ip.view.enable_pick_mode)
-        tp.hi_gray_picker.valueChanged.connect(PIPELINE.pick_color_from_image)
         tp.grading_wb_picker.pickRequested.connect(ip.view.enable_pick_mode)
         tp.grading_wb_picker.valueChanged.connect(PIPELINE.pick_color_from_image)
         # allow view to send values back
         ip.view.pointPicked.connect(tp.pivot_picker.finish_pick)
         ip.view.pointPicked.connect(tp.pre_inv_wb_picker.finish_pick)
-        ip.view.pointPicked.connect(tp.lo_gray_picker.finish_pick)
-        ip.view.pointPicked.connect(tp.hi_gray_picker.finish_pick)
         ip.view.pointPicked.connect(tp.grading_wb_picker.finish_pick)
         # update pivot if pivot picked
         tp.pivot_picker.colorChanged.connect(self.update_pivot)
         # update grading panel if grading wb picked
         tp.grading_wb_picker.colorChanged.connect(self.update_grading_panel)
-        # update ratios with estimate if possible
-        tp.lo_gray_picker.colorChanged.connect(self.estimate_ratios)
-        tp.hi_gray_picker.colorChanged.connect(self.estimate_ratios)
         # update_edit_params on change of any subvalue of ToolPanel
         for tool in tp.tools:
             if hasattr(tool, "clicked"):
@@ -324,7 +311,8 @@ class EditingDisplay(QWidget):
 
     def update_pivot(self, color):
         tp = self.tool_panel
-        tp.pivot_slider.setValue(color[1])
+        density = convert_to_grayscale(color, REC2020_WEIGHTS)
+        tp.pivot_slider.setValue(density)
 
     def update_grading_panel(self, color):
         tp = self.tool_panel
@@ -333,11 +321,14 @@ class EditingDisplay(QWidget):
         tp.blue_tune_slider.setValue(color[1] - color[2])
 
     def estimate_ratios(self, color):
+        global PIPELINE
         tp = self.tool_panel
-        lo = tp.lo_gray_picker.colorValue()
-        hi = tp.hi_gray_picker.colorValue()
-        if lo is not None and lo.any() and hi is not None and hi.any():
-            red_ratio, blue_ratio = estimate_inversion_ratios(lo, hi)
+        if PIPELINE.min_percentile is not None and \
+           PIPELINE.min_percentile.any() and \
+           PIPELINE.max_percentile is not None and \
+           PIPELINE.max_percentile.any():
+            red_ratio, blue_ratio = estimate_inversion_ratios(PIPELINE.min_percentile,
+                                                              PIPELINE.max_percentile)
             tp.red_ratio_slider.setValue(red_ratio)
             tp.blue_ratio_slider.setValue(blue_ratio)
            
@@ -368,10 +359,6 @@ class EditingDisplay(QWidget):
         ep.blue_ratio = tp.blue_ratio_slider.value()
         ep.green_exponent = tp.contrast_slider.value()
         ep.out_brightness = tp.out_brightness_slider.value()
-        ep.lo_gray_xy = tp.lo_gray_picker.value()
-        ep.lo_gray = tp.lo_gray_picker.colorValue()
-        ep.hi_gray_xy = tp.hi_gray_picker.value()
-        ep.hi_gray = tp.hi_gray_picker.colorValue()
         ep.red_gain = tp.red_gain_slider.value()
         ep.green_gain = tp.green_gain_slider.value()
         ep.blue_gain = tp.blue_gain_slider.value()
@@ -398,8 +385,6 @@ class EditingDisplay(QWidget):
         tp.blue_ratio_slider.setValue(ep.blue_ratio)
         tp.contrast_slider.setValue(ep.green_exponent)
         tp.out_brightness_slider.setValue(ep.out_brightness)
-        tp.lo_gray_picker.update_color(ep.lo_gray)
-        tp.hi_gray_picker.update_color(ep.hi_gray)
         tp.red_gain_slider.setValue(ep.red_gain)
         tp.green_gain_slider.setValue(ep.green_gain)
         tp.blue_gain_slider.setValue(ep.blue_gain)
