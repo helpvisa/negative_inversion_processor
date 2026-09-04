@@ -43,9 +43,9 @@ def update_sidecar(filepath):
         final_path = filepath + ".nip.json"
         with open(final_path, 'w') as output:
             json.dump(payload, output)
-            print(f"Updated sidecar.", file=sys.stderr)
+            print("Updated sidecar.", file=sys.stderr)
     else:
-        print(f"No file found in index.", file=sys.stderr)
+        print("No file found in index.", file=sys.stderr)
 
 
 def load_params_from_sidecar(filepath):
@@ -80,14 +80,14 @@ def load_params_from_sidecar(filepath):
                 ep.wb_xy = wb_xy_tuple
                 wb_list = sidecar['wb_reference']
                 wb_tuple = np.array([wb_list[0], wb_list[1], wb_list[2]]) if wb_list else None
-                ep.wb_reference = sidecar['wb_reference']
+                ep.wb_reference = wb_tuple
                 ep.wb_red = sidecar['wb_red']
                 ep.wb_green = sidecar['wb_green']
                 ep.wb_blue = sidecar['wb_blue']
                 ep.tonemap = sidecar['tonemap']
                 ep.toe = sidecar['toe']
         except FileNotFoundError:
-            print(f"No sidebar file found. Returning blank edit params.")
+            print("No sidebar file found. Returning blank edit params.")
     else:
-        print(f"No file path specified.", file=sys.stderr)
+        print("No file path specified.", file=sys.stderr)
     return ep
