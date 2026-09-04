@@ -219,7 +219,7 @@ class ProcessingPipeline(QObject):
         ep = self.edit_params
 
         def current():
-            self.final_preview = noritsu_tonemap(self.final_preview, toe=ep.toe)
+            self.final_preview = aces_tonemap(self.final_preview, toe=ep.toe)
 
         def proceed():
             self.previewUpdated.emit()
