@@ -195,7 +195,7 @@ def main():
                                       crop_start_x:crop_end_x]
         # apply tonemapping
         if args.tonemap:
-            final_image = aces_tonemap(final_image, args.toe)
+            final_image = aces_tonemap(final_image, toe=args.toe)
         # save image to disk
         # do we possess an icc profile to embed?
         icc_profile = None

@@ -9,3 +9,4 @@ __pycache__/
 *.swo
 *.tiff
 *.xmp
+photo_index.json

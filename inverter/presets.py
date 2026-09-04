@@ -1,6 +1,10 @@
+import os
 import sys
 import json
 import numpy as np
+from dataclasses import dataclass, asdict
+from edit_params import EditParams
+from global_vars import PHOTO_INDEX
 
 
 def save_preset(filepath, adjustments):

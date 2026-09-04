@@ -30,6 +30,8 @@ from global_vars import PHOTO_INDEX
 # we must subclass QObject to leverage signals
 class ProcessingPipeline(QObject):
     rawLoaded = Signal(str)
+    saveInitiated = Signal(str)
+    saveFinished = Signal(str)
     previewUpdated = Signal()
     editParamsUpdated = Signal()
     colorPicked = Signal(tuple[float, float, float])
@@ -208,7 +210,7 @@ class ProcessingPipeline(QObject):
         ep = self.edit_params
 
         def current():
-            self.final_preview = aces_tonemap(self.final_preview, ep.toe)
+            self.final_preview = aces_tonemap(self.final_preview, toe=ep.toe)
 
         def proceed():
             self.previewUpdated.emit()
@@ -224,7 +226,8 @@ class ProcessingPipeline(QObject):
         original_path = Path(self.currently_loaded_filename)
         output_path = Path(output_folder)
         final_path = output_path / original_path.with_suffix(".tiff").name
-        print(f"Saving final output to {final_path}.", file=sys.stderr)
+        self.saveInitiated.emit(f"Writing {original_path.name} to {final_path}...")
+        print(f"Writing {original_path.name} to {final_path}...", file=sys.stderr)
 
         def process_and_save():
             working_image = self.source_image
@@ -276,10 +279,11 @@ class ProcessingPipeline(QObject):
                 working_image = convert_to_grayscale_from_g(working_image)
             # tonemap
             if ep.tonemap:
-                working_image = aces_tonemap(working_image, ep.toe)
+                working_image = aces_tonemap(working_image, toe=ep.toe)
             # convert to sRGB; will provide option for custom colorspace soon
             working_image, _ = convert_to_sRGB(working_image)
             save_image(working_image, final_path, 'f16')
+            self.saveFinished.emit(f"Finished writing {original_path.name} to {final_path}.")
 
         thread = self.threadpool.instantiate_thread(process_and_save)
         self.threadpool.active_threads[thread.thread_id] = thread

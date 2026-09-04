@@ -1,4 +1,5 @@
 import sys
+from pathlib import Path
 import numpy as np
 from PySide6.QtCore import Qt, Slot
 from PySide6.QtGui import QImage, QPixmap, QPalette, QColor
@@ -12,10 +13,11 @@ from custom_widgets import ImageView, LabeledSlider, ColorPicker
 from colour_management import convert_to_sRGB
 from edit_params import EditParams, Stage
 from pipeline import ProcessingPipeline
-from global_vars import GLOBAL_FLAGS
+from global_vars import GLOBAL_FLAGS, PHOTO_INDEX
 
 
 # some global variables for tracking information about the current session
+CLIPBOARD = None
 LOADED_RAW_PATH = None
 CURRENT_IMAGE_SOURCE_DATA = []
 PIPELINE: ProcessingPipeline = ProcessingPipeline()
@@ -88,6 +90,11 @@ class ToolPanel(QWidget):
         # --- top-level tools layout
         self.layout = QVBoxLayout()
         self.layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        # -- no associated layout (generics)
+        self.copy_params_button = QPushButton("Copy Parameters")
+        self.paste_params_button = QPushButton("Paste Parameters")
+        self.layout.addWidget(self.copy_params_button)
+        self.layout.addWidget(self.paste_params_button)
         # --- pre-inversion layout (orientation and initial white balance)
         pre_inversion_groupbox = QGroupBox("Pre-Inversion")
         pre_inversion_layout = QVBoxLayout()
@@ -184,7 +191,7 @@ class ToolPanel(QWidget):
                                              hide_value=True)
         self.tonemap_checkbox = QCheckBox("Apply Tonemapping")
         self.toe_slider = LabeledSlider("Toe",
-                                        0.0, 10.0, 1.0, 300)
+                                        -0.5, 0.5, 0.0, 300)
         custom_grading_layout.addLayout(grading_gain_layout)
         custom_grading_layout.addLayout(grading_tune_layout)
         custom_grading_layout.addWidget(self.grading_wb_picker)
@@ -231,6 +238,7 @@ class EditingDisplay(QWidget):
         self.tool_panel = ToolPanel()
         self.scrollable_sidebar.setWidget(self.tool_panel)
         # statusbar
+        self.message_queue = []
         self.statusbar = QLabel("No status to display.")
         self.statusbar.setSizePolicy(QSizePolicy.Policy.Preferred,
                                      QSizePolicy.Policy.Fixed)
@@ -262,6 +270,10 @@ class EditingDisplay(QWidget):
         self.load_button.clicked.connect(self.open_load_dialog)
         self.save_button.clicked.connect(self.open_save_dialog)
         PIPELINE.rawLoaded.connect(self.update_current_filename_display)
+        PIPELINE.saveInitiated.connect(self.push_message)
+        PIPELINE.saveFinished.connect(self.push_message)
+        tp.copy_params_button.clicked.connect(self.copy_parameters)
+        tp.paste_params_button.clicked.connect(self.paste_parameters)
         tp.pre_inv_rotate_left.clicked.connect(lambda: self.update_rotation(1))
         tp.pre_inv_rotate_right.clicked.connect(lambda: self.update_rotation(-1))
         # this is super weird and fragile with many edge cases
@@ -302,6 +314,18 @@ class EditingDisplay(QWidget):
         tp.red_tune_slider.setValue(color[1] - color[0])
         tp.green_tune_slider.setValue(color[1] - color[1])
         tp.blue_tune_slider.setValue(color[1] - color[2])
+
+    def copy_parameters(self):
+        global CLIPBOARD
+        CLIPBOARD = self.edit_params.copy()
+        self.push_message("Image parameters copied to clipboard.")
+
+    def paste_parameters(self):
+        global CLIPBOARD, PIPELINE
+        if CLIPBOARD and PIPELINE:
+            self.push_message("Image parameters pasted from clipboard.")
+            PIPELINE.process_image(CLIPBOARD.copy())
+            self.set_edit_params_from_pipeline()
 
     def update_edit_params(self):
         global PIPELINE
@@ -362,8 +386,19 @@ class EditingDisplay(QWidget):
     def open_load_dialog(self):
         global PIPELINE, LOADED_RAW_PATH
         image_path, _ = QFileDialog.getOpenFileName()
+        self.push_message(f"Loading {image_path} from disk.")
         PIPELINE.load_raw_file(image_path)
         LOADED_RAW_PATH = image_path
+
+    def open_load_folder_dialog(self):
+        global PIPELINE, LOADED_RAW_PATH
+        selected_path, _ = QFileDialog.getExistingDirectory()
+        folder_path = Path(selected_path)
+        files = [f for f in folder_path.iterdir() if f.is_file()]
+        for f in files:
+            # load each file into the PHOTO_INDEX
+            # PIPELINE.load_raw_file_to_index(f)
+            pass
 
     def open_save_dialog(self):
         global PIPELINE
@@ -373,6 +408,21 @@ class EditingDisplay(QWidget):
 
     def update_current_filename_display(self, filename: str):
         self.current_file_label.setText(filename)
+        self.push_message("Loading finished.")
+
+    def push_message(self, message: str = None):
+        if message:
+            self.message_queue.append(message)
+        length = len(self.message_queue)
+        if length > 2:
+            self.statusbar.setText(f"{self.message_queue[length - 3]}\n"
+                                   f"{self.message_queue[length - 2]}\n"
+                                   f"{self.message_queue[length - 1]}")
+        elif length > 1:
+            self.statusbar.setText(f"{self.message_queue[length - 2]}\n"
+                                   f"{self.message_queue[length - 1]}")
+        elif length == 1:
+            self.statusbar.setText(f"{self.message_queue[length - 1]}")
 
 
 class MainWindow(QMainWindow):
