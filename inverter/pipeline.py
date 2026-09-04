@@ -23,7 +23,7 @@ from processing import (load_raw_image, save_image, rotate_image,
                         convert_to_grayscale_from_g,
                         apply_addition, apply_gain, apply_ffc)
 from custom_widgets import ColorPicker
-from colour_management import aces_tonemap, convert_to_sRGB
+from colour_management import noritsu_tonemap, aces_tonemap, convert_to_sRGB
 from global_vars import PHOTO_INDEX
 
 

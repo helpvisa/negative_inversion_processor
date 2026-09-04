@@ -29,7 +29,7 @@ class EditParams:
     pivot: float = 0.745
     red_ratio: float = 1.36
     blue_ratio: float = 0.86
-    green_exponent: float = 1.5
+    green_exponent: float = 1.0
     out_brightness: float = 0.745
 
     # --- final user grade

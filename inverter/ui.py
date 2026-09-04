@@ -127,7 +127,7 @@ class ToolPanel(QWidget):
         checkbox_layout.addWidget(self.bw_checkbox)
         self.pivot_slider = LabeledSlider("Pivot",
                                           0.0, 2.0, 0.745, 300)
-        self.pivot_picker = ColorPicker("Estimate Pivot from Point", Stage.RATIO,
+        self.pivot_picker = ColorPicker("Pick Pivot from Film Base", Stage.RATIO,
                                         hide_value=True)
         self.red_ratio_slider = LabeledSlider("Red Ratio",
                                               0.0, 3.0, 1.36, 300,
@@ -136,13 +136,13 @@ class ToolPanel(QWidget):
                                                0.0, 3.0, 0.86, 300,
                                                "#ccccff")
         self.contrast_slider = LabeledSlider("Contrast",
-                                             0.0, 5.0, 1.5, 300)
+                                             0.0, 5.0, 1.0, 300)
         self.out_brightness_slider = LabeledSlider("Output Brightness",
                                                    0.0, 3.0, 0.745, 300)
-        self.estimate_ratios_button = QPushButton("Estimate Ratios")
+        self.estimate_ratios_button = QPushButton("Estimate Ratios (Crop-Dependent)")
         inversion_layout.addLayout(checkbox_layout)
-        inversion_layout.addWidget(self.pivot_slider)
         inversion_layout.addWidget(self.pivot_picker)
+        inversion_layout.addWidget(self.pivot_slider)
         inversion_layout.addWidget(self.red_ratio_slider)
         inversion_layout.addWidget(self.blue_ratio_slider)
         inversion_layout.addWidget(self.estimate_ratios_button)
@@ -331,6 +331,7 @@ class EditingDisplay(QWidget):
                                                               PIPELINE.max_percentile)
             tp.red_ratio_slider.setValue(red_ratio)
             tp.blue_ratio_slider.setValue(blue_ratio)
+            tp.pivot_slider.setValue(PIPELINE.min_percentile[1])
            
 
     def copy_parameters(self):

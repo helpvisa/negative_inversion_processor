@@ -6,7 +6,31 @@ from processing import convert_to_grayscale
 from global_vars import REC2020_WEIGHTS
 
 
-def aces_tonemap(image_data, contrast: float = 1.0, toe: float = 0.0):
+def noritsu_tonemap(image_data, contrast: float = 1.0, toe: float = 0.0):
+    """
+    Affect overall tone using 'noritsu-style' tone curve
+    https://github.com/rohanpandula/noritsu-tool/blob/main/noritsu/render.py
+    """
+    v = image_data
+    # affect overall tone using 'noritsu-style' tone curve
+    # https://github.com/rohanpandula/noritsu-tool/blob/main/noritsu/render.py
+    k = contrast
+    pts_x = np.array([0.0, 0.08, 0.25, 0.5, 0.75, 0.92, 1.0])
+    # s-shaped curve, midtones pinned
+    mid = 0.5
+    pts_y = mid + (pts_x - mid) * k
+    # toe
+    pts_y = pts_y + toe * (1.0 - pts_x) * np.exp(-pts_x * 4.0)
+    pts_y = np.clip(pts_y, 0.0, 1.0)
+    # make sure line is straight (no hills or valleys == monotonic)
+    for i in range(1, len(pts_y)):
+        if pts_y[i] < pts_y[i - 1]:
+            pts_y[i] = pts_y[i - 1]
+    v = np.interp(v, pts_x, pts_y)
+    return np.clip(v, 0.0, 1.0)
+
+
+def aces_tonemap(image_data, toe: float = 0.0):
     """
     ACES-style tonemapping from HDR to 0.0 <-> 1.0.
     Converts to ACES colour space before re-converting back to Linear Rec.2020.
@@ -29,21 +53,6 @@ def aces_tonemap(image_data, contrast: float = 1.0, toe: float = 0.0):
     ])
 
     v = image_data
-    # affect overall tone using 'noritsu-style' tone curve
-    # https://github.com/rohanpandula/noritsu-tool/blob/main/noritsu/render.py
-    k = contrast
-    pts_x = np.array([0.0, 0.08, 0.25, 0.5, 0.75, 0.92, 1.0])
-    # s-shape
-    mid = 0.5
-    pts_y = mid + (pts_x - mid) * k
-    # toe
-    pts_y = pts_y + toe * (1.0 - pts_x) * np.exp(-pts_x * 4.0)
-    pts_y = np.clip(pts_y, 0.0, 1.0)
-    # make sure line is straight (no hills or valleys == monotonic)
-    for i in range(1, len(pts_y)):
-        if pts_y[i] < pts_y[i - 1]:
-            pts_y[i] = pts_y[i - 1]
-    v = np.interp(v, pts_x, pts_y)
     
     # apply linear rec.2020 -> aces
     # mat_in.T makes sure numpy respects array shape
@@ -52,7 +61,7 @@ def aces_tonemap(image_data, contrast: float = 1.0, toe: float = 0.0):
     if not is_grayscale:
         v = v @ mat_in.T
 
-    a = v * (v + 0.0245786) - 0.000090537
+    a = v * (v + 0.0245786) - (0.000090537 * toe)
     b = v * (0.983729 * v + 0.4329510) + 0.238081
     tonemapped = a / b
 

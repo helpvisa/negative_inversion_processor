@@ -272,7 +272,7 @@ def white_balance(image_data, region=None, colourspace_weights=None,
     return adjustment
 
 
-def density_balance(image_data, region=None, exponent=1.5, ref_point_in=None,
+def density_balance(image_data, region=None, exponent=1.0, ref_point_in=None,
                     red_ratio=1.36, blue_ratio=0.86,
                     pivot=0.745, out_brightness=0.745):
     """
