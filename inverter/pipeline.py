@@ -290,6 +290,10 @@ class ProcessingPipeline(QObject):
             if ep.tonemap:
                 working_image = aces_tonemap(working_image, toe=ep.toe)
             # convert to sRGB; will provide option for custom colorspace soon
+            if working_image.ndim < 3:
+                working_image = np.stack((working_image,
+                                          working_image,
+                                          working_image), axis=-1)
             working_image, _ = convert_to_sRGB(working_image)
             save_image(working_image, final_path, 'f16')
             self.saveFinished.emit(f"Finished writing {original_path.name} to {final_path}.")
