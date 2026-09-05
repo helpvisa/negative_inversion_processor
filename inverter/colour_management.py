@@ -6,6 +6,14 @@ from processing import convert_to_grayscale
 from global_vars import REC2020_WEIGHTS
 
 
+def simple_tonemap(image_data, contrast: float = 1.0):
+    """
+    Simple contrast curve.
+    """
+    v = image_data
+    curve = v * v * (3 - 2 * v)
+    return np.clip((1 - contrast) * v + contrast * curve, 0.0, 1.0)
+
 def noritsu_tonemap(image_data, contrast: float = 1.0, toe: float = 0.0):
     """
     Affect overall tone using 'noritsu-style' tone curve
@@ -72,11 +80,36 @@ def aces_tonemap(image_data, toe: float = 0.0):
     return np.clip(out_data, 0.0, 1.0)
 
 
-def agx_tonemap(image_data):
+def filmic_curve(x,
+                 shoulder_strength=0.22,
+                 linear_strength=0.30, linear_angle=0.10,
+                 toe_strength=0.20, toe_numerator=0.01, toe_denominator=0.30):
     """
-    AgX-style tonemapping from HDR to 0.0 <-> 1.0.
-    Performed directly in Linear Rec.2020 colour space.
+    Fully tweakable filmic tone curve.
     """
+    A = shoulder_strength
+    B = linear_strength
+    C = linear_angle
+    D = toe_strength
+    E = toe_numerator
+    F = toe_denominator
+
+    return ((x * (A * x + C * B) + D * E) / (x * (A * x + B) + D * F)) - (E / F)
+
+
+def filmic_tonemap(image_data,
+                   max_white=11.2,
+                   toe_strength=0.20, shoulder_strength=0.22):
+    """
+    Filmic tonemapper built on filmic curve.
+    """
+    curve = filmic_curve(image_data,
+                         shoulder_strength=shoulder_strength,
+                         toe_strength=toe_strength)
+    scale = filmic_curve(max_white,
+                         shoulder_strength=shoulder_strength,
+                         toe_strength=toe_strength)
+    return np.clip(curve / scale, 0.0, 1.0)
     
 
 

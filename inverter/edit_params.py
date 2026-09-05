@@ -45,7 +45,7 @@ class EditParams:
     wb_green: float = 0.0
     wb_blue: float = 0.0
     tonemap: bool = False
-    toe: float = 0.0
+    toe: float = 0.20
 
     def copy(self) -> "EditParams":
         """

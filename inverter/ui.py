@@ -191,7 +191,7 @@ class ToolPanel(QWidget):
                                              hide_value=True)
         self.tonemap_checkbox = QCheckBox("Apply Tonemapping")
         self.toe_slider = LabeledSlider("Toe",
-                                        -2.0, 1.0, 0.0, 400)
+                                        0.0, 1.0, 0.20, 400)
         custom_grading_layout.addLayout(grading_gain_layout)
         custom_grading_layout.addLayout(grading_tune_layout)
         custom_grading_layout.addWidget(self.grading_wb_picker)
