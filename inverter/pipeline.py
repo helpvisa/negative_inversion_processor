@@ -23,8 +23,7 @@ from processing import (load_raw_image, save_image, rotate_image,
                         convert_to_grayscale_from_g,
                         apply_addition, apply_gain, apply_ffc)
 from custom_widgets import ColorPicker
-from colour_management import (filmic_tonemap, noritsu_tonemap, aces_tonemap,
-                               convert_to_sRGB)
+from colour_management import (filmic_tonemap, aces_tonemap, convert_to_sRGB)
 from sidecars import update_sidecar, load_params_from_sidecar
 from global_vars import PHOTO_INDEX
 
@@ -66,18 +65,50 @@ class ProcessingPipeline(QObject):
 
     # perform a deep comparison of self.edit_params and the new EditParams
     # passed in to determine where in the pipeline the reprocess needs to occur
-    def process_image(self, new_edit_params):
-        difference = DeepDiff(self.edit_params, new_edit_params)
-        if difference:
-            update_sidecar(self.currently_loaded_filename)
-            print(difference, file=sys.stderr)
-            self.edit_params = new_edit_params
-            # update the global photo index
-            PHOTO_INDEX[self.currently_loaded_filename]['edit_params'] = self.edit_params
-            # eventually, we check the difference to update only where
-            # a change has actually occurred
-            changes = difference['values_changed']
+    def process_image(self, new_edit_params, force_refresh=False):
+        if force_refresh:
             self.pre_inv_process(preview=True)
+        else:
+            difference = DeepDiff(self.edit_params, new_edit_params)
+            if difference:
+                update_sidecar(self.currently_loaded_filename)
+                print(difference, file=sys.stderr)
+                self.edit_params = new_edit_params
+                # update the global photo index
+                PHOTO_INDEX[self.currently_loaded_filename]['edit_params'] = self.edit_params
+                # eventually, we check the difference to update only where
+                # a change has actually occurred
+                changes = {}
+                type_changes = {}
+                if 'values_changed' in difference:
+                    changes = difference['values_changed']
+                if 'type_changes' in difference:
+                    type_changes = difference['type_changes']
+                # change occurred in pre_inv_process
+                pre_inv_changes = ['root.ffc_image', 'root.rotation',
+                                   'root.crop_inset', 'root.base_color',
+                                   'root.base_color[0]', 'root.base_color[1]',
+                                   'root.base_color[2]']
+                inv_changes = ['root.skip_inversion']
+                ratio_changes = ['root.pivot', 'root.red_ratio', 'root.blue_ratio',
+                                 'root.green_exponent', 'root.out_brightness',
+                                 'root.bw_mode']
+                grade_changes = ['root.red_gain', 'root.green_gain',
+                                 'root.blue_gain', 'root.wb_red', 'root.wb_green',
+                                 'root.wb_blue']
+                tonemap_changes = ['root.tonemap', 'root.toe']
+                if any(key in changes for key in pre_inv_changes) or \
+                   any(key in type_changes for key in pre_inv_changes):
+                    self.pre_inv_process(preview=True)
+                if any(key in changes for key in inv_changes):
+                    self.inv_process(preview=True)
+                if any(key in changes for key in ratio_changes):
+                    self.ratio_process(preview=True)
+                if any(key in changes for key in grade_changes):
+                    self.grade_process(preview=True)
+                if any(key in changes for key in tonemap_changes):
+                    self.tonemap_process(preview=True)
+            
 
     def pre_inv_process(self, preview: bool = False):
         ep = self.edit_params
@@ -200,15 +231,11 @@ class ProcessingPipeline(QObject):
             # then convert to luminance
             if not ep.skip_inversion:
                 self.grade_inter = density_to_luminance(self.grade_inter)
-            self.final_preview = self.grade_inter.copy()
             if ep.bw_mode:
-                self.final_preview = convert_to_grayscale_from_g(self.final_preview)
+                self.grade_inter = convert_to_grayscale_from_g(self.grade_inter)
 
         def proceed():
-            if ep.tonemap:
-                self.tonemap_process(preview)
-            else:
-                self.previewUpdated.emit()
+            self.tonemap_process(preview)
 
         thread = self.threadpool.instantiate_thread(current)
         self.threadpool.active_threads[thread.thread_id] = thread
@@ -220,8 +247,11 @@ class ProcessingPipeline(QObject):
         ep = self.edit_params
 
         def current():
-            self.final_preview = aces_tonemap(self.final_preview, toe=ep.toe)
-            # self.final_preview = filmic_tonemap(self.final_preview, toe_strength=ep.toe)
+            if ep.tonemap:
+                self.final_preview = aces_tonemap(self.grade_inter, toe=ep.toe)
+                # self.final_preview = filmic_tonemap(self.grade_inter, toe_strength=ep.toe)
+            else:
+                self.final_preview = self.grade_inter.copy()
 
         def proceed():
             self.previewUpdated.emit()

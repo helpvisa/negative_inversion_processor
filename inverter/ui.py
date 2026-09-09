@@ -8,13 +8,13 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget,
                                QLabel, QPushButton, QFileDialog,
                                QGraphicsScene, QSplitter,
                                QCheckBox, QGroupBox, QScrollArea,
-                               QSizePolicy)
+                               QSizePolicy, QTreeView)
 from custom_widgets import ImageView, LabeledSlider, ColorPicker
 from colour_management import convert_to_sRGB
 from edit_params import EditParams, Stage
 from pipeline import ProcessingPipeline
 from processing import estimate_inversion_ratios
-from global_vars import GLOBAL_FLAGS, PHOTO_INDEX, REC2020_WEIGHTS
+from global_vars import GLOBAL_FLAGS, PHOTO_INDEX
 
 
 # some global variables for tracking information about the current session
@@ -228,9 +228,15 @@ class EditingDisplay(QWidget):
         # controls
         # demo controls
         self.current_file_label = QLabel("NO FILE LOADED")
+        self.current_file_label.setSizePolicy(QSizePolicy.Policy.Preferred,
+                                              QSizePolicy.Policy.Fixed)
+        self.current_file_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.load_button = QPushButton("Load Image")
         self.save_button = QPushButton("Save Processed Image")
-        # actual side panel
+        # file management side panel
+        # we pass self so QTreeView is freed if EditingDisplay ever dies
+        self.file_tree = QTreeView(self)
+        # editing side panel
         self.scrollable_sidebar = QScrollArea()
         self.scrollable_sidebar.setWidgetResizable(True)
         self.scrollable_sidebar.setMinimumWidth(350)
@@ -246,14 +252,22 @@ class EditingDisplay(QWidget):
         # define layouts
         # top-level layout
         self.layout = QVBoxLayout()
-        # file layout
+        # setup header
         self.headerbar_layout = QHBoxLayout()
         self.headerbar_layout.addWidget(self.current_file_label)
-        self.headerbar_layout.addWidget(self.load_button)
-        self.headerbar_layout.addWidget(self.save_button)
+        # setup file management layout
+        self.management_sidebar = QWidget()
+        self.management_layout = QVBoxLayout()
+        self.save_load_layout = QHBoxLayout()
+        self.save_load_layout.addWidget(self.load_button)
+        self.save_load_layout.addWidget(self.save_button)
+        self.management_layout.addLayout(self.save_load_layout)
+        self.management_layout.addWidget(self.file_tree)
+        self.management_sidebar.setLayout(self.management_layout)
         # editing layout
         self.editing_layout = QSplitter(Qt.Horizontal)
         self.editing_layout.setHandleWidth(16)
+        self.editing_layout.addWidget(self.management_sidebar)
         self.editing_layout.addWidget(self.image_preview)
         self.editing_layout.addWidget(self.scrollable_sidebar)
         # add all layouts and wrap it all up
@@ -309,12 +323,6 @@ class EditingDisplay(QWidget):
         if PIPELINE:
             PIPELINE.process_image(ep.copy())
 
-    # def update_pivot(self, color):
-    #     tp = self.tool_panel
-    #     density = (color[1])
-    #     tp.pivot_slider.setValue(density)
-    #     tp.out_brightness_slider.setValue(density)
-
     def update_grading_panel(self, color):
         tp = self.tool_panel
         tp.red_tune_slider.setValue(color[1] - color[0])
@@ -345,7 +353,7 @@ class EditingDisplay(QWidget):
         global CLIPBOARD, PIPELINE
         if CLIPBOARD and PIPELINE:
             self.push_message("Image parameters pasted from clipboard.")
-            PIPELINE.process_image(CLIPBOARD.copy())
+            PIPELINE.process_image(CLIPBOARD.copy(), force_refresh=True)
             self.set_edit_params_from_pipeline()
 
     def update_edit_params(self):
