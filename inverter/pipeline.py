@@ -11,6 +11,7 @@ import sys
 from pathlib import Path
 import numpy as np
 from scipy import ndimage
+from PIL import ImageCms
 from PySide6.QtCore import QObject, Signal, Slot
 from PySide6.QtWidgets import QMessageBox
 from deepdiff import DeepDiff
@@ -67,6 +68,7 @@ class ProcessingPipeline(QObject):
     # passed in to determine where in the pipeline the reprocess needs to occur
     def process_image(self, new_edit_params, force_refresh=False):
         if force_refresh:
+            self.edit_params = new_edit_params
             self.pre_inv_process(preview=True)
         else:
             difference = DeepDiff(self.edit_params, new_edit_params)
@@ -326,8 +328,9 @@ class ProcessingPipeline(QObject):
                 working_image = np.stack((working_image,
                                           working_image,
                                           working_image), axis=-1)
-            working_image, _ = convert_to_sRGB(working_image)
-            save_image(working_image, final_path, 'f16')
+            working_image, sRGB_profile = convert_to_sRGB(working_image)
+            save_profile = ImageCms.ImageCmsProfile(sRGB_profile).tobytes()
+            save_image(working_image, final_path, 'f16', save_profile)
             self.saveFinished.emit(f"Finished writing {original_path.name} to {final_path}.")
 
         thread = self.threadpool.instantiate_thread(process_and_save)
