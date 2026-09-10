@@ -14,7 +14,7 @@ from colour_management import convert_to_sRGB
 from edit_params import EditParams, Stage
 from pipeline import ProcessingPipeline
 from processing import estimate_inversion_ratios
-from global_vars import GLOBAL_FLAGS, PHOTO_INDEX, SAVE_FORMATS
+from global_vars import GLOBAL_FLAGS, PHOTO_INDEX, SAVE_FORMATS, RAW_EXTENSIONS
 
 
 # some global variables for tracking information about the current session
@@ -431,7 +431,14 @@ class EditingDisplay(QWidget):
 
     def open_load_dialog(self):
         global PIPELINE, LOADED_RAW_PATH
-        image_path, _ = QFileDialog.getOpenFileName()
+        filter_string = "Camera RAW ("
+        filter_string += " ".join(f"*.{e}" for e in RAW_EXTENSIONS)
+        filter_string += ");; All Files (*)"
+        image_path, _ = QFileDialog.getOpenFileName(
+            None,
+            caption="Select RAW File",
+            filter=filter_string
+        )
         self.push_message(f"Loading {image_path} from disk.")
         PIPELINE.load_raw_file(image_path)
         LOADED_RAW_PATH = image_path
@@ -449,10 +456,20 @@ class EditingDisplay(QWidget):
     def open_save_dialog(self):
         global PIPELINE, LOADED_RAW_PATH
         # image_folder = QFileDialog.getExistingDirectory()
-        image_path = QFileDialog.getSaveFileName()
-        PIPELINE.save_final_image(image_to_save=LOADED_RAW_PATH,
-                                  output_path=image_path[0],
-                                  image_format=self.format_combobox.currentData())
+        current_format = self.format_combobox.currentData()
+        default_filter = "TIFF Files (*.tiff *.tif)"
+        default_extension = "tiff"
+        if current_format.startswith('j'):
+            default_filter = "JPEG Files (*.jpg *.jpeg)"
+        new_dialog = QFileDialog()
+        new_dialog.setAcceptMode(QFileDialog.AcceptSave)
+        new_dialog.setNameFilter(default_filter)
+        new_dialog.setDefaultSuffix(default_extension)
+        image_path = new_dialog.exec()
+        if image_path:
+            PIPELINE.save_final_image(image_to_save=LOADED_RAW_PATH,
+                                      output_path=image_path[0],
+                                      image_format=current_format)
 
     def update_current_filename_display(self, filename: str):
         self.current_file_label.setText(filename)
