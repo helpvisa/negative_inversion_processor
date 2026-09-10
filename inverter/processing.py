@@ -77,6 +77,18 @@ def apply_gain(image_data, adjustment: tuple[float, float, float]):
     return np.stack([red_new, green_new, blue_new], axis=2)
 
 
+def apply_division(image_data, adjustment: tuple[float, float, float]):
+    """
+    Perform division on a given working image and return the result.
+
+    Adjustment is a tuple representing (r, g, b)
+    """
+    red_new = image_data[:, :, 0].copy() / adjustment[0]
+    green_new = image_data[:, :, 1].copy() / adjustment[1]
+    blue_new = image_data[:, :, 2].copy() / adjustment[2]
+    return np.stack([red_new, green_new, blue_new], axis=2)
+
+
 def apply_power(image_data, adjustment: tuple[float, float, float]):
     """
     Raise image channels to a given exponent and return the result.
@@ -157,6 +169,10 @@ def invert_to_density(image_data):
     # clip rgb values to avoid discolouration outside the negative itself,
     # which should theoretically still be within a 0 - 1 range at this point
     return np.log10(1 / np.clip(image_data, a_min=1e-3, a_max=1.0))
+
+
+def to_density(image_data):
+    return np.log10(image_data)
 
 
 def density_to_luminance(image_data, scale=0.01):

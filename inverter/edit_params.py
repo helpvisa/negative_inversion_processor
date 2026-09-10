@@ -19,6 +19,8 @@ class EditParams:
     ffc_image: str = None
     rotation: int = 0
     crop_inset: float = 1.0
+    crop_shift_h: float = 0.0
+    crop_shift_v: float = 0.0
 
     # --- inversion parameters
     skip_inversion: bool = False
@@ -31,7 +33,6 @@ class EditParams:
     red_ratio: float = 1.36
     blue_ratio: float = 0.86
     green_exponent: float = 1.0
-    out_brightness: float = 0.745
 
     # --- final user grade
     red_gain: float = 1.0
@@ -44,6 +45,9 @@ class EditParams:
     wb_red: float = 0.0
     wb_green: float = 0.0
     wb_blue: float = 0.0
+
+    # --- brightness, look, and tonemapping
+    final_exposure: float = 1.0
     tonemap: bool = False
     toe: float = 0.20
 

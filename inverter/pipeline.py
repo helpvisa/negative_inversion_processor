@@ -20,9 +20,9 @@ from edit_params import EditParams, Stage
 from processing import (load_raw_image, save_image, rotate_image,
                         white_balance, density_balance,
                         average_sample_point,
-                        invert_to_density, density_to_luminance,
+                        invert_to_density, to_density, density_to_luminance,
                         convert_to_grayscale_from_g,
-                        apply_addition, apply_gain, apply_ffc)
+                        apply_addition, apply_gain, apply_division, apply_ffc)
 from custom_widgets import ColorPicker
 from colour_management import (filmic_tonemap, aces_tonemap, convert_to_sRGB)
 from sidecars import update_sidecar, load_params_from_sidecar
@@ -61,8 +61,6 @@ class ProcessingPipeline(QObject):
         self.inv_inter = []
         self.ratio_inter = []
         self.grade_inter = []
-        # and kick off an initial edit
-        # self.pre_inv_process()
 
     # perform a deep comparison of self.edit_params and the new EditParams
     # passed in to determine where in the pipeline the reprocess needs to occur
@@ -88,17 +86,18 @@ class ProcessingPipeline(QObject):
                     type_changes = difference['type_changes']
                 # change occurred in pre_inv_process
                 pre_inv_changes = ['root.ffc_image', 'root.rotation',
-                                   'root.crop_inset', 'root.base_color',
+                                   'root.crop_inset', 'root.crop_shift_v',
+                                   'root.crop_shift_h', 'root.base_color',
                                    'root.base_color[0]', 'root.base_color[1]',
                                    'root.base_color[2]']
                 inv_changes = ['root.skip_inversion']
                 ratio_changes = ['root.pivot', 'root.red_ratio', 'root.blue_ratio',
-                                 'root.green_exponent', 'root.out_brightness',
-                                 'root.bw_mode']
+                                 'root.green_exponent', 'root.bw_mode']
                 grade_changes = ['root.red_gain', 'root.green_gain',
                                  'root.blue_gain', 'root.wb_red', 'root.wb_green',
                                  'root.wb_blue']
-                tonemap_changes = ['root.tonemap', 'root.toe']
+                tonemap_changes = ['root.final_exposure', 'root.tonemap',
+                                   'root.toe']
                 if any(key in changes for key in pre_inv_changes) or \
                    any(key in type_changes for key in pre_inv_changes):
                     self.pre_inv_process(preview=True)
@@ -133,9 +132,29 @@ class ProcessingPipeline(QObject):
                 crop_height = int(self.raw_height * self.preview_scale * ep.crop_inset)
                 crop_width = int(self.raw_width * self.preview_scale * ep.crop_inset)
                 crop_start_y = int(self.raw_height * self.preview_scale - crop_height) // 2
+                crop_start_y += int(ep.crop_shift_v * self.raw_height * self.preview_scale)
+                if crop_start_y < 0:
+                    crop_start_y = 0
+                if crop_start_y > self.raw_height:
+                    crop_start_y = self.raw_height
                 crop_end_y = crop_start_y + crop_height
+                crop_end_y += int(ep.crop_shift_v * self.raw_height * self.preview_scale)
+                if crop_end_y < 0:
+                    crop_end_y = 0
+                if crop_end_y > self.raw_height:
+                    crop_end_y = self.raw_height
                 crop_start_x = int(self.raw_width * self.preview_scale - crop_width) // 2
+                crop_start_x += int(ep.crop_shift_h * self.raw_width * self.preview_scale)
+                if crop_start_x < 0:
+                    crop_start_x = 0
+                if crop_start_x > self.raw_width:
+                    crop_start_x = self.raw_width
                 crop_end_x = crop_start_x + crop_width
+                crop_end_x += int(ep.crop_shift_h * self.raw_width * self.preview_scale)
+                if crop_end_x < 0:
+                    crop_end_x = 0
+                if crop_end_x > self.raw_width:
+                    crop_end_x = self.raw_width
                 self.rotation_inter = self.rotation_inter[crop_start_y:crop_end_y,
                                                           crop_start_x:crop_end_x]
             # apply rotation
@@ -171,7 +190,7 @@ class ProcessingPipeline(QObject):
                 self.min_percentile = np.percentile(array_1d, 0.5, axis=0)
                 self.max_percentile = np.percentile(array_1d, 99.8, axis=0)
             else:
-                self.inv_inter = self.pre_inv_inter.copy()
+                self.inv_inter = to_density(self.pre_inv_inter)
 
         def proceed():
             self.ratio_process(preview)
@@ -193,7 +212,7 @@ class ProcessingPipeline(QObject):
                                                    red_ratio=ep.red_ratio,
                                                    blue_ratio=ep.blue_ratio,
                                                    pivot=ep.pivot,
-                                                   out_brightness=ep.out_brightness)
+                                                   out_brightness=ep.pivot)
                     self.ratio_inter = apply_gain(self.inv_inter, scale['values'])
                     self.ratio_inter = apply_addition(self.ratio_inter, shift['values'])
                 else:
@@ -202,7 +221,7 @@ class ProcessingPipeline(QObject):
                                                    red_ratio=1.0,
                                                    blue_ratio=1.0,
                                                    pivot=ep.pivot,
-                                                   out_brightness=ep.out_brightness)
+                                                   out_brightness=ep.pivot)
                     self.ratio_inter = apply_gain(self.inv_inter, scale['values'])
                     self.ratio_inter = apply_addition(self.ratio_inter, shift['values'])
             else:
@@ -226,13 +245,22 @@ class ProcessingPipeline(QObject):
             if not ep.bw_mode:
                 # gain
                 gain_tuple = (ep.red_gain, ep.green_gain, ep.blue_gain)
-                self.grade_inter = apply_gain(self.grade_inter, gain_tuple)
+                if ep.skip_inversion:
+                    self.grade_inter = apply_division(self.grade_inter,
+                                                      gain_tuple)
+                else:
+                    self.grade_inter = apply_gain(self.grade_inter, gain_tuple)
                 # tune (addition)
                 add_tuple = (ep.wb_red, ep.wb_green, ep.wb_blue)
+                # if ep.skip_inversion:
+                    # add_tuple = tuple(val * -1 for val in add_tuple)
                 self.grade_inter = apply_addition(self.grade_inter, add_tuple)
             # then convert to luminance
             if not ep.skip_inversion:
                 self.grade_inter = density_to_luminance(self.grade_inter)
+            else:
+                self.grade_inter = density_to_luminance(self.grade_inter,
+                                                        scale=1.0)
             if ep.bw_mode:
                 self.grade_inter = convert_to_grayscale_from_g(self.grade_inter)
 
@@ -249,11 +277,16 @@ class ProcessingPipeline(QObject):
         ep = self.edit_params
 
         def current():
-            if ep.tonemap:
-                self.final_preview = aces_tonemap(self.grade_inter, toe=ep.toe)
-                # self.final_preview = filmic_tonemap(self.grade_inter, toe_strength=ep.toe)
+            # apply final makeup gain
+            if not ep.bw_mode:
+                exposure_tuple = (ep.final_exposure,
+                                  ep.final_exposure,
+                                  ep.final_exposure)
+                self.final_preview = apply_gain(self.grade_inter, exposure_tuple)
             else:
-                self.final_preview = self.grade_inter.copy()
+                self.final_preview = self.grade_inter * ep.final_exposure
+            if ep.tonemap:
+                self.final_preview = aces_tonemap(self.final_preview, toe=ep.toe)
 
         def proceed():
             self.previewUpdated.emit()
@@ -264,28 +297,56 @@ class ProcessingPipeline(QObject):
         thread.signals.finished.connect(self.threadpool.remove_thread)
         self.threadpool.start(thread)
 
-    def save_final_image(self, output_folder: str = None):
-        ep = self.edit_params
-        original_path = Path(self.currently_loaded_filename)
-        output_path = Path(output_folder)
-        final_path = output_path / original_path.with_suffix(".tiff").name
-        self.saveInitiated.emit(f"Writing {original_path.name} to {final_path}...")
-        print(f"Writing {original_path.name} to {final_path}...", file=sys.stderr)
+    def save_final_image(self, image_to_save: str, output_path: str = None):
+        self.saveInitiated.emit(f"Writing {image_to_save} to {output_path}...")
+        print(f"Writing {image_to_save} to {output_path}...", file=sys.stderr)
 
         def process_and_save():
-            working_image = self.source_image
+            working_image = load_raw_image(image_to_save).astype(np.float32) / 65535.0
+            current_height, current_width, _ = working_image.shape
+            ep = EditParams()
+            if image_to_save in PHOTO_INDEX:
+                ref = PHOTO_INDEX[image_to_save]
+                if "edit_params" in ref:
+                    print(f"Loading edit_params from memory for {image_to_save}.",
+                          file=sys.stderr)
+                    ep = ref['edit_params']
+                else:
+                    print(f"Loading edit_params from sidecar for {image_to_save}.",
+                          file=sys.stderr)
+                    ep = load_params_from_sidecar(image_to_save)
             # pre-inversion
-            ffc_image = ep.ffc_image if self.ffc_image else None
-            if ffc_image:
-                working_image = apply_ffc(working_image, ffc_image)
+            # ffc_image = ep.ffc_image if self.ffc_image else None
+            # if ffc_image:
+                # working_image = apply_ffc(working_image, ffc_image)
             # apply crop inset
             if ep.crop_inset < 1.0:
-                crop_height = int(self.raw_height * ep.crop_inset)
-                crop_width = int(self.raw_width * ep.crop_inset)
-                crop_start_y = int(self.raw_height - crop_height) // 2
+                crop_height = int(current_height * ep.crop_inset)
+                crop_width = int(current_width * ep.crop_inset)
+                crop_start_y = int(current_height - crop_height) // 2
+                crop_start_y += int(ep.crop_shift_v * current_width)
+                if crop_start_y < 0:
+                    crop_start_y = 0
+                if crop_start_y > current_height:
+                    crop_start_y = current_height
                 crop_end_y = crop_start_y + crop_height
-                crop_start_x = int(self.raw_width - crop_width) // 2
+                crop_end_y += int(ep.crop_shift_v * current_width)
+                if crop_end_y < 0:
+                    crop_end_y = 0
+                if crop_end_y > current_height:
+                    crop_end_y = current_height
+                crop_start_x = int(current_width - crop_width) // 2
+                crop_start_x += int(ep.crop_shift_h * current_width)
+                if crop_start_x < 0:
+                    crop_start_x = 0
+                if crop_start_x > current_width:
+                    crop_start_x = current_width
                 crop_end_x = crop_start_x + crop_width
+                crop_end_x += int(ep.crop_shift_h * current_width)
+                if crop_end_x < 0:
+                    crop_end_x = 0
+                if crop_end_x > current_width:
+                    crop_end_x = current_width
                 working_image = working_image[crop_start_y:crop_end_y,
                                               crop_start_x:crop_end_x]
             working_image = rotate_image(working_image, ep.rotation)
@@ -307,20 +368,36 @@ class ProcessingPipeline(QObject):
                                                red_ratio=red_ratio,
                                                blue_ratio=blue_ratio,
                                                pivot=ep.pivot,
-                                               out_brightness=ep.out_brightness)
+                                               out_brightness=ep.pivot)
                 working_image = apply_gain(working_image, scale['values'])
                 working_image = apply_addition(working_image, shift['values'])
+            else:
+                working_image = to_density(working_image)
             # grade
             if not ep.bw_mode:
                 gain_tuple = (ep.red_gain, ep.green_gain, ep.blue_gain)
-                working_image = apply_gain(working_image, gain_tuple)
+                if ep.skip_inversion:
+                    working_image = apply_division(working_image, gain_tuple)
+                else:
+                    working_image = apply_gain(working_image, gain_tuple)
                 add_tuple = (ep.wb_red, ep.wb_green, ep.wb_blue)
+                # if ep.skip_inversion:
+                    # add_tuple = tuple(val * -1 for val in add_tuple)
                 working_image = apply_addition(working_image, add_tuple)
             if not ep.skip_inversion:
                 working_image = density_to_luminance(working_image)
+            else:
+                working_image = density_to_luminance(working_image, scale=1.0)
             if ep.bw_mode:
                 working_image = convert_to_grayscale_from_g(working_image)
             # tonemap
+            if not ep.bw_mode:
+                exposure_tuple = (ep.final_exposure,
+                                  ep.final_exposure,
+                                  ep.final_exposure)
+                working_image = apply_gain(working_image, exposure_tuple)
+            else:
+                working_image *= ep.final_exposure
             if ep.tonemap:
                 working_image = aces_tonemap(working_image, toe=ep.toe)
             # convert to sRGB; will provide option for custom colorspace soon
@@ -330,8 +407,8 @@ class ProcessingPipeline(QObject):
                                           working_image), axis=-1)
             working_image, sRGB_profile = convert_to_sRGB(working_image)
             save_profile = ImageCms.ImageCmsProfile(sRGB_profile).tobytes()
-            save_image(working_image, final_path, 'f16', save_profile)
-            self.saveFinished.emit(f"Finished writing {original_path.name} to {final_path}.")
+            save_image(working_image, output_path, 'f16', save_profile)
+            self.saveFinished.emit(f"Finished writing {image_to_save} to {output_path}.")
 
         thread = self.threadpool.instantiate_thread(process_and_save)
         self.threadpool.active_threads[thread.thread_id] = thread
@@ -385,7 +462,7 @@ class ProcessingPipeline(QObject):
                     self.edit_params = load_params_from_sidecar(name)
                     ref["edit_params"] = self.edit_params
                 self.editParamsUpdated.emit()
-                self.pre_inv_process(preview=True)
+                self.process_image(self.edit_params, force_refresh=True)
 
             def error_func(e):
                 exctype, value, error = e

@@ -246,7 +246,7 @@ class LabeledSlider(QWidget):
         layout.setContentsMargins(0, 0, 0, 8)
         header = QHBoxLayout()
         self.label = QLabel(label)
-        self.readout = QLabel(f"{value:.2f}")
+        self.readout = QLabel(f"{value:.3f}")
         header.addWidget(self.label)
         # adding a stretch ensures label <-> readout are hard left + right
         header.addStretch()
@@ -279,7 +279,7 @@ class LabeledSlider(QWidget):
 
     def _on_slider_changed(self, raw_value):
         value = raw_value / self.precision
-        self.readout.setText(f"{value:.2f}")
+        self.readout.setText(f"{value:.3f}")
         # self.valueChanged.emit(value)
         self._signal_timer.start()
 
@@ -295,7 +295,7 @@ class LabeledSlider(QWidget):
     def setValue(self, value):
         self.slider.blockSignals(True)
         self.slider.setValue(int(value * self.precision))
-        self.readout.setText(f"{value:.2f}")
+        self.readout.setText(f"{value:.3f}")
         self.slider.blockSignals(False)
 
 

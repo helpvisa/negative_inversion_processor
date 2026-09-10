@@ -101,6 +101,13 @@ class ToolPanel(QWidget):
         pre_inversion_layout = QVBoxLayout()
         self.crop_inset_slider = LabeledSlider("Crop Inset",
                                                0.0, 1.0, 1.0, 300)
+        self.crop_shift_layout = QHBoxLayout()
+        self.crop_shift_h_slider = LabeledSlider("Horizontal Shift",
+                                                 -0.5, 0.5, 0.0, 1000)
+        self.crop_shift_v_slider = LabeledSlider("Vertical Shift",
+                                                 -0.5, 0.5, 0.0, 1000)
+        self.crop_shift_layout.addWidget(self.crop_shift_h_slider)
+        self.crop_shift_layout.addWidget(self.crop_shift_v_slider)
         self.pre_inv_orientation_layout = QHBoxLayout()
         self.pre_inv_rotate_left = QPushButton("Rotate Left")
         self.pre_inv_rotate_right = QPushButton("Rotate Right")
@@ -108,10 +115,13 @@ class ToolPanel(QWidget):
         self.pre_inv_orientation_layout.addWidget(self.pre_inv_rotate_right)
         self.pre_inv_wb_picker = ColorPicker("Dmin - Base Color", Stage.PRE_INV)
         pre_inversion_layout.addWidget(self.crop_inset_slider)
+        pre_inversion_layout.addLayout(self.crop_shift_layout)
         pre_inversion_layout.addLayout(self.pre_inv_orientation_layout)
         pre_inversion_layout.addWidget(self.pre_inv_wb_picker)
         pre_inversion_groupbox.setLayout(pre_inversion_layout)
         self.tools.extend([self.crop_inset_slider,
+                           self.crop_shift_h_slider,
+                           self.crop_shift_v_slider,
                            self.pre_inv_rotate_left,
                            self.pre_inv_rotate_right,
                            self.pre_inv_wb_picker])
@@ -137,8 +147,6 @@ class ToolPanel(QWidget):
                                                "#ccccff")
         self.contrast_slider = LabeledSlider("Contrast",
                                              0.0, 5.0, 1.0, 300)
-        self.out_brightness_slider = LabeledSlider("Output Brightness",
-                                                   0.0, 3.0, 0.745, 300)
         self.estimate_ratios_button = QPushButton("Estimate Ratios (Crop-Dependent)")
         inversion_layout.addLayout(checkbox_layout)
         # inversion_layout.addWidget(self.pivot_picker)
@@ -147,7 +155,6 @@ class ToolPanel(QWidget):
         inversion_layout.addWidget(self.blue_ratio_slider)
         inversion_layout.addWidget(self.estimate_ratios_button)
         inversion_layout.addWidget(self.contrast_slider)
-        inversion_layout.addWidget(self.out_brightness_slider)
         inversion_groupbox.setLayout(inversion_layout)
         self.tools.extend([self.skip_inversion_checkbox,
                            self.bw_checkbox,
@@ -156,8 +163,7 @@ class ToolPanel(QWidget):
                            self.red_ratio_slider,
                            self.blue_ratio_slider,
                            self.estimate_ratios_button,
-                           self.contrast_slider,
-                           self.out_brightness_slider])
+                           self.contrast_slider])
         # --- user grading
         custom_grading_groupbox = QGroupBox("Grading")
         custom_grading_layout = QVBoxLayout()
@@ -189,14 +195,9 @@ class ToolPanel(QWidget):
         grading_tune_layout.addWidget(self.blue_tune_slider)
         self.grading_wb_picker = ColorPicker("Pick White Balance", Stage.GRADE,
                                              hide_value=True)
-        self.tonemap_checkbox = QCheckBox("Apply Tonemapping")
-        self.toe_slider = LabeledSlider("Toe",
-                                        0.0, 1.0, 0.20, 400)
         custom_grading_layout.addLayout(grading_gain_layout)
         custom_grading_layout.addLayout(grading_tune_layout)
         custom_grading_layout.addWidget(self.grading_wb_picker)
-        custom_grading_layout.addWidget(self.tonemap_checkbox)
-        custom_grading_layout.addWidget(self.toe_slider)
         custom_grading_groupbox.setLayout(custom_grading_layout)
         self.tools.extend([self.red_gain_slider,
                            self.green_gain_slider,
@@ -204,13 +205,27 @@ class ToolPanel(QWidget):
                            self.red_tune_slider,
                            self.green_tune_slider,
                            self.blue_tune_slider,
-                           self.grading_wb_picker,
+                           self.grading_wb_picker])
+        # --- tonemapping and final output
+        tonemap_groupbox = QGroupBox("Tonemapping and Output")
+        tonemap_layout = QVBoxLayout()
+        self.exposure_slider = LabeledSlider("Final Exposure",
+                                             0.0, 20.0, 1.0, 400)
+        self.tonemap_checkbox = QCheckBox("Apply Tonemapping")
+        self.toe_slider = LabeledSlider("Toe",
+                                        0.0, 1.0, 0.20, 400)
+        tonemap_layout.addWidget(self.exposure_slider)
+        tonemap_layout.addWidget(self.tonemap_checkbox)
+        tonemap_layout.addWidget(self.toe_slider)
+        tonemap_groupbox.setLayout(tonemap_layout)
+        self.tools.extend([self.exposure_slider,
                            self.tonemap_checkbox,
                            self.toe_slider])
         # --- add all layouts
         self.layout.addWidget(pre_inversion_groupbox)
         self.layout.addWidget(inversion_groupbox)
         self.layout.addWidget(custom_grading_groupbox)
+        self.layout.addWidget(tonemap_groupbox)
         self.setLayout(self.layout)
 
 
@@ -341,9 +356,7 @@ class EditingDisplay(QWidget):
             tp.red_ratio_slider.setValue(red_ratio)
             tp.blue_ratio_slider.setValue(blue_ratio)
             tp.pivot_slider.setValue(PIPELINE.min_percentile[1])
-            tp.out_brightness_slider.setValue(PIPELINE.min_percentile[1])
            
-
     def copy_parameters(self):
         global CLIPBOARD
         CLIPBOARD = self.edit_params.copy()
@@ -361,6 +374,8 @@ class EditingDisplay(QWidget):
         ep = self.edit_params
         tp = self.tool_panel
         ep.crop_inset = tp.crop_inset_slider.value()
+        ep.crop_shift_h = tp.crop_shift_h_slider.value()
+        ep.crop_shift_v = tp.crop_shift_v_slider.value()
         ep.skip_inversion = tp.skip_inversion_checkbox.isChecked()
         ep.bw_mode = tp.bw_checkbox.isChecked()
         ep.base_color_xy = tp.pre_inv_wb_picker.value()
@@ -369,7 +384,6 @@ class EditingDisplay(QWidget):
         ep.red_ratio = tp.red_ratio_slider.value()
         ep.blue_ratio = tp.blue_ratio_slider.value()
         ep.green_exponent = tp.contrast_slider.value()
-        ep.out_brightness = tp.out_brightness_slider.value()
         ep.red_gain = tp.red_gain_slider.value()
         ep.green_gain = tp.green_gain_slider.value()
         ep.blue_gain = tp.blue_gain_slider.value()
@@ -378,6 +392,7 @@ class EditingDisplay(QWidget):
         ep.wb_red = tp.red_tune_slider.value()
         ep.wb_green = tp.green_tune_slider.value()
         ep.wb_blue = tp.blue_tune_slider.value()
+        ep.final_exposure = tp.exposure_slider.value()
         ep.tonemap = tp.tonemap_checkbox.isChecked()
         ep.toe = tp.toe_slider.value()
         if PIPELINE:
@@ -388,6 +403,8 @@ class EditingDisplay(QWidget):
         ep = self.edit_params
         tp = self.tool_panel
         tp.crop_inset_slider.setValue(ep.crop_inset)
+        tp.crop_shift_h_slider.setValue(ep.crop_shift_h)
+        tp.crop_shift_v_slider.setValue(ep.crop_shift_v)
         tp.skip_inversion_checkbox.setChecked(ep.skip_inversion)
         tp.bw_checkbox.setChecked(ep.bw_mode)
         tp.pre_inv_wb_picker.update_color(ep.base_color)
@@ -395,7 +412,6 @@ class EditingDisplay(QWidget):
         tp.red_ratio_slider.setValue(ep.red_ratio)
         tp.blue_ratio_slider.setValue(ep.blue_ratio)
         tp.contrast_slider.setValue(ep.green_exponent)
-        tp.out_brightness_slider.setValue(ep.out_brightness)
         tp.red_gain_slider.setValue(ep.red_gain)
         tp.green_gain_slider.setValue(ep.green_gain)
         tp.blue_gain_slider.setValue(ep.blue_gain)
@@ -403,6 +419,7 @@ class EditingDisplay(QWidget):
         tp.red_tune_slider.setValue(ep.wb_red)
         tp.green_tune_slider.setValue(ep.wb_green)
         tp.blue_tune_slider.setValue(ep.wb_blue)
+        tp.exposure_slider.setValue(ep.final_exposure)
         tp.tonemap_checkbox.setChecked(ep.tonemap)
         tp.toe_slider.setValue(ep.toe)
 
@@ -424,10 +441,11 @@ class EditingDisplay(QWidget):
             pass
 
     def open_save_dialog(self):
-        global PIPELINE
-        image_folder = QFileDialog.getExistingDirectory()
-        print(image_folder, file=sys.stderr)
-        PIPELINE.save_final_image(image_folder)
+        global PIPELINE, LOADED_RAW_PATH
+        # image_folder = QFileDialog.getExistingDirectory()
+        image_path = QFileDialog.getSaveFileName()
+        PIPELINE.save_final_image(image_to_save=LOADED_RAW_PATH,
+                                  output_path=image_path[0])
 
     def update_current_filename_display(self, filename: str):
         self.current_file_label.setText(filename)

@@ -15,6 +15,8 @@ def update_sidecar(filepath):
             "ffc_image": ep.ffc_image,
             "rotation": ep.rotation,
             "crop_inset": ep.crop_inset,
+            "crop_shift_h": ep.crop_shift_h,
+            "crop_shift_v": ep.crop_shift_v,
             "skip_inversion": ep.skip_inversion,
             "bw_mode": ep.bw_mode,
             "base_color_xy": ep.base_color_xy,
@@ -25,7 +27,6 @@ def update_sidecar(filepath):
             "red_ratio": ep.red_ratio,
             "blue_ratio": ep.blue_ratio,
             "green_exponent": ep.green_exponent,
-            "out_brightness": ep.out_brightness,
             "red_gain": ep.red_gain,
             "green_gain": ep.green_gain,
             "blue_gain": ep.blue_gain,
@@ -36,6 +37,7 @@ def update_sidecar(filepath):
             "wb_red": ep.wb_red,
             "wb_green": ep.wb_green,
             "wb_blue": ep.wb_blue,
+            "final_exposure": ep.final_exposure,
             "tonemap": ep.tonemap,
             "toe": ep.toe
         }
@@ -59,6 +61,8 @@ def load_params_from_sidecar(filepath):
                 ep.ffc_image = sidecar['ffc_image']
                 ep.rotation = sidecar['rotation']
                 ep.crop_inset = sidecar['crop_inset']
+                ep.crop_shift_h = sidecar['crop_shift_h']
+                ep.crop_shift_v = sidecar['crop_shift_v']
                 ep.skip_inversion = sidecar['skip_inversion']
                 ep.bw_mode = sidecar['bw_mode']
                 bc_xy_list = sidecar['base_color_xy']
@@ -71,7 +75,6 @@ def load_params_from_sidecar(filepath):
                 ep.red_ratio = sidecar['red_ratio']
                 ep.blue_ratio = sidecar['blue_ratio']
                 ep.green_exponent = sidecar['green_exponent']
-                ep.out_brightness = sidecar['out_brightness']
                 ep.red_gain = sidecar['red_gain']
                 ep.green_gain = sidecar['green_gain']
                 ep.blue_gain = sidecar['blue_gain']
@@ -84,10 +87,18 @@ def load_params_from_sidecar(filepath):
                 ep.wb_red = sidecar['wb_red']
                 ep.wb_green = sidecar['wb_green']
                 ep.wb_blue = sidecar['wb_blue']
+                ep.final_exposure = sidecar['final_exposure']
                 ep.tonemap = sidecar['tonemap']
                 ep.toe = sidecar['toe']
+                return ep
         except FileNotFoundError:
-            print("No sidebar file found. Returning blank edit params.")
+            print("No sidebar file found. Returning blank edit params.",
+                  file=sys.stderr)
+            return EditParams()
+        except KeyError as e:
+            print(f"Sidecar is missing a key and may be for an old version of NIP: {e}",
+                  file=sys.stderr)
+            return EditParams()
     else:
         print("No file path specified.", file=sys.stderr)
-    return ep
+        return EditParams()
