@@ -2,6 +2,7 @@ import sys
 import rawpy
 import tifffile
 import numpy as np
+from PIL import Image
 
 
 def load_raw_image(path):
@@ -23,7 +24,7 @@ def save_image(image_data, output_path, tiff_format='f16', icc_profile=None):
     image_to_save = image_data
     # set predictor if floating point (default)
     p_val = 3
-    if tiff_format == "u8":
+    if tiff_format == "u8" or tiff_format == "ju8":
         image_data = np.clip(image_data, a_min=0, a_max=1)
         image_to_save = np.multiply(image_data, 255).astype(np.uint8)
         p_val = None
@@ -35,12 +36,19 @@ def save_image(image_data, output_path, tiff_format='f16', icc_profile=None):
         image_to_save = image_data.astype(np.float16)
     elif tiff_format == "f32":
         image_to_save = image_data.astype(np.float32)
-    tifffile.imwrite(output_path,
-                     image_to_save,
-                     compression="zlib",
-                     compressionargs={"level":9},
-                     predictor=p_val,
-                     iccprofile=icc_profile)
+    if tiff_format.startswith('j'):
+        jpeg_data = Image.fromarray(image_to_save)
+        jpeg_data.save(output_path,
+                       'JPEG',
+                       quality=95,
+                       icc_profile=icc_profile)
+    else:
+        tifffile.imwrite(output_path,
+                         image_to_save,
+                         compression="zlib",
+                         compressionargs={"level":9},
+                         predictor=p_val,
+                         iccprofile=icc_profile)
     print(f"Saved inversion to {output_path}", file=sys.stderr)
 
 

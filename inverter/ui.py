@@ -7,14 +7,14 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget,
                                QVBoxLayout, QHBoxLayout,
                                QLabel, QPushButton, QFileDialog,
                                QGraphicsScene, QSplitter,
-                               QCheckBox, QGroupBox, QScrollArea,
+                               QCheckBox, QGroupBox, QScrollArea, QComboBox,
                                QSizePolicy, QTreeView)
 from custom_widgets import ImageView, LabeledSlider, ColorPicker
 from colour_management import convert_to_sRGB
 from edit_params import EditParams, Stage
 from pipeline import ProcessingPipeline
 from processing import estimate_inversion_ratios
-from global_vars import GLOBAL_FLAGS, PHOTO_INDEX
+from global_vars import GLOBAL_FLAGS, PHOTO_INDEX, SAVE_FORMATS
 
 
 # some global variables for tracking information about the current session
@@ -248,6 +248,11 @@ class EditingDisplay(QWidget):
         self.current_file_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.load_button = QPushButton("Load Image")
         self.save_button = QPushButton("Save Processed Image")
+        self.format_combobox = QComboBox()
+        # add items to combobox
+        for item in SAVE_FORMATS:
+            self.format_combobox.addItem(item['display'],
+                                         userData=item['data'])
         # file management side panel
         # we pass self so QTreeView is freed if EditingDisplay ever dies
         self.file_tree = QTreeView(self)
@@ -276,6 +281,7 @@ class EditingDisplay(QWidget):
         self.save_load_layout = QHBoxLayout()
         self.save_load_layout.addWidget(self.load_button)
         self.save_load_layout.addWidget(self.save_button)
+        self.save_load_layout.addWidget(self.format_combobox)
         self.management_layout.addLayout(self.save_load_layout)
         self.management_layout.addWidget(self.file_tree)
         self.management_sidebar.setLayout(self.management_layout)
@@ -445,7 +451,8 @@ class EditingDisplay(QWidget):
         # image_folder = QFileDialog.getExistingDirectory()
         image_path = QFileDialog.getSaveFileName()
         PIPELINE.save_final_image(image_to_save=LOADED_RAW_PATH,
-                                  output_path=image_path[0])
+                                  output_path=image_path[0],
+                                  image_format=self.format_combobox.currentData())
 
     def update_current_filename_display(self, filename: str):
         self.current_file_label.setText(filename)

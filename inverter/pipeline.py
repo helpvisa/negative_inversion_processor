@@ -297,7 +297,8 @@ class ProcessingPipeline(QObject):
         thread.signals.finished.connect(self.threadpool.remove_thread)
         self.threadpool.start(thread)
 
-    def save_final_image(self, image_to_save: str, output_path: str = None):
+    def save_final_image(self, image_to_save: str,
+                         output_path: str = None, image_format: str = "f16"):
         self.saveInitiated.emit(f"Writing {image_to_save} to {output_path}...")
         print(f"Writing {image_to_save} to {output_path}...", file=sys.stderr)
 
@@ -407,7 +408,7 @@ class ProcessingPipeline(QObject):
                                           working_image), axis=-1)
             working_image, sRGB_profile = convert_to_sRGB(working_image)
             save_profile = ImageCms.ImageCmsProfile(sRGB_profile).tobytes()
-            save_image(working_image, output_path, 'f16', save_profile)
+            save_image(working_image, output_path, image_format, save_profile)
             self.saveFinished.emit(f"Finished writing {image_to_save} to {output_path}.")
 
         thread = self.threadpool.instantiate_thread(process_and_save)
