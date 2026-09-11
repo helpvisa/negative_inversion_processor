@@ -487,6 +487,7 @@ class EditingDisplay(QWidget):
         default_extension = "tiff"
         if current_format.startswith('j'):
             default_filter = "JPEG Files (*.jpg *.jpeg)"
+            default_extension = "jpg"
         new_dialog = QFileDialog()
         new_dialog.setAcceptMode(QFileDialog.AcceptSave)
         new_dialog.setNameFilter(default_filter)
