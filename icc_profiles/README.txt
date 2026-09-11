@@ -1,13 +1,13 @@
-The files in this folder were retrieved from "Elle Stone's Well-Behaved ICC
-Profiles and Code" on GitHub, at the following link:
+The files in this folder were compiled from "Elle Stone's Well-Behaved ICC
+Profiles and Code", found on GitHub at the following link:
 
 https://github.com/ellelstone/elles_icc_profiles
 
-These profiles were originally licensed under the GPLv2, and are redistributed
-here under the GPLv3 license included in the parent folder.
-
+These profiles have been compiled using the code provided at the above link and
+are redistributed here under the GPLv3 license included in the parent folder.
 
 Included below is the GPLv3 license notice:
+
 This file is part of Negative Inversion Processor.
 
 Negative Inversion Processor  is free software: you can redistribute it
