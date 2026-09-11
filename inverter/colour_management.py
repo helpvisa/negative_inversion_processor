@@ -15,7 +15,8 @@
 
 import numpy as np
 import PyOpenColorIO as ocio
-from colour import RGB_to_XYZ, XYZ_to_RGB, RGB_COLOURSPACES, CCS_ILLUMINANTS
+from colour import (RGB_to_XYZ, XYZ_to_RGB, RGB_COLOURSPACES, CCS_ILLUMINANTS,
+                    cctf_encoding)
 from PIL import ImageCms
 from processing import convert_to_grayscale
 from global_vars import REC2020_WEIGHTS
@@ -146,7 +147,7 @@ def reinhard_tonemap(image_data, key=1.0):
 
 def convert_to_sRGB(image_data):
     """
-    Convert the given image data from Linear Rec2020 to sRGB.
+    Convert the given image data from Linear Rec.2020 to sRGB.
     """
     sRGB_conversion = RGB_to_XYZ(
         image_data,
@@ -162,6 +163,14 @@ def convert_to_sRGB(image_data):
     # create and return an sRGB colour profile along with it
     sRGB_profile = ImageCms.createProfile("sRGB")
     return sRGB_image, sRGB_profile
+
+
+def convert_to_g22(image_data):
+    """
+    Convert the given grayscale image data with an sRGB-like gamma 2.2
+    transfer function.
+    """
+    return cctf_encoding(image_data, function='sRGB')
 
 
 def ocio_load_and_create_config(config_path=None) -> ocio.Config:

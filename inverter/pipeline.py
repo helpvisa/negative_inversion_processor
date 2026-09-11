@@ -39,7 +39,7 @@ from processing import (load_raw_image, save_image, rotate_image,
                         convert_to_grayscale_from_g,
                         apply_addition, apply_gain, apply_division, apply_ffc)
 from custom_widgets import ColorPicker
-from colour_management import (aces_tonemap, convert_to_sRGB)
+from colour_management import (aces_tonemap, convert_to_sRGB, convert_to_g22)
 from sidecars import update_sidecar, load_params_from_sidecar
 from global_vars import PHOTO_INDEX
 
@@ -87,7 +87,6 @@ class ProcessingPipeline(QObject):
         else:
             difference = DeepDiff(self.edit_params, new_edit_params)
             if difference:
-                update_sidecar(self.currently_loaded_filename)
                 print(difference, file=sys.stderr)
                 self.edit_params = new_edit_params
                 # update the global photo index
@@ -125,6 +124,7 @@ class ProcessingPipeline(QObject):
                     self.grade_process(preview=True)
                 if any(key in changes for key in tonemap_changes):
                     self.tonemap_process(preview=True)
+                update_sidecar(self.currently_loaded_filename)
             
 
     def pre_inv_process(self, preview: bool = False):
@@ -434,10 +434,9 @@ class ProcessingPipeline(QObject):
                     icc_name = "sRGB-elle-V4-g22.icc"
                 # also convert image to sRGB format
                 if working_image.ndim < 3:
-                    working_image = np.stack((working_image,
-                                              working_image,
-                                              working_image), axis=-1)
-                working_image, _ = convert_to_sRGB(working_image)
+                    working_image = convert_to_g22(working_image)
+                else:
+                    working_image, _ = convert_to_sRGB(working_image)
             profile_path = current_root / ".." / "icc_profiles" / icc_name
             try:
                 with open(profile_path, "rb") as icc_file:

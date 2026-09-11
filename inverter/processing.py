@@ -37,6 +37,7 @@ def load_raw_image(path):
 def save_image(image_data, output_path, tiff_format='f16', icc_profile=None):
     # default case; save as f32 (input format from processing pipeline)
     image_to_save = image_data
+    print(f"NDIM: {image_to_save.ndim}", file=sys.stderr)
     # set predictor if floating point (default)
     p_val = 3
     if tiff_format == "u8" or tiff_format == "ju8":
