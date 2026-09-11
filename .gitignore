@@ -4,9 +4,7 @@
 # working folders
 __pycache__/
 # working files
-*.icc
 *.swp
 *.swo
 *.tiff
 *.xmp
-photo_index.json

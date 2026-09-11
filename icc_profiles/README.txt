@@ -1,4 +1,13 @@
-/*
+The files in this folder were retrieved from "Elle Stone's Well-Behaved ICC
+Profiles and Code" on GitHub, at the following link:
+
+https://github.com/ellelstone/elles_icc_profiles
+
+These profiles were originally licensed under the GPLv2, and are redistributed
+here under the GPLv3 license included in the parent folder.
+
+
+Included below is the GPLv3 license notice:
 This file is part of Negative Inversion Processor.
 
 Negative Inversion Processor  is free software: you can redistribute it
@@ -13,29 +22,3 @@ Public License for more details.
 
 You should have received a copy of the GNU General Public License along with
 Negative Inversion Processor. If not, see <https://www.gnu.org/licenses/>.
-*/
-
-QGroupBox {
-    font-weight: bold;
-    font-size: 14px;
-    margin: 8px;
-    padding: 8px;
-    border-width: 1px;
-    border-style: solid;
-    border-color: #606060;
-    border-radius: 4px;
-}
-
-QGroupBox::title {
-    top: -10px;
-    margin: 8px;
-    subcontrol-origin: margin;
-    subcontrol-position: top centre;
-}
-
-StyledPanel {
-    border-width: 1px;
-    border-style: solid;
-    border-color: #606060;
-    border-radius: 4px;
-}

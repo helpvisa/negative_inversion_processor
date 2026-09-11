@@ -1,3 +1,18 @@
+# This file is part of Negative Inversion Processor.
+#
+# Negative Inversion Processor  is free software: you can redistribute it
+# and/or modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation, either version 3 of the License,
+# or (at your option) any later version.
+# 
+# Negative Inversion Processor is distributed in the hope that it will be
+# useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+# Public License for more details.
+# 
+# You should have received a copy of the GNU General Public License along with
+# Negative Inversion Processor. If not, see <https://www.gnu.org/licenses/>. 
+
 import sys
 from pathlib import Path
 import numpy as np
@@ -247,10 +262,12 @@ class EditingDisplay(QWidget):
                                               QSizePolicy.Policy.Fixed)
         self.current_file_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.load_button = QPushButton("Load Image")
+        self.profile_warning = QLabel("NIP processes all images in Linear Rec.2020.")
         self.profile_picker = QComboBox()
         self.profile_picker.addItem("sRGB Gamma 2.2",
-                                    userData="sRGB")
-        self.profile_load_button = QPushButton("Load ICC Profile")
+                                    userData="srgb")
+        self.profile_picker.addItem("Linear Rec.2020 Gamma 1.0",
+                                    userData="rec2020")
         self.save_button = QPushButton("Save Processed Image")
         self.format_combobox = QComboBox()
         # add items to combobox
@@ -283,14 +300,12 @@ class EditingDisplay(QWidget):
         self.management_sidebar = QWidget()
         self.management_layout = QVBoxLayout()
         self.export_layout = QVBoxLayout()
-        self.profile_layout = QHBoxLayout()
-        self.profile_layout.addWidget(self.profile_picker)
-        self.profile_layout.addWidget(self.profile_load_button)
         self.save_layout = QHBoxLayout()
-        self.save_layout.addWidget(self.save_button)
+        self.save_layout.addWidget(self.profile_picker)
         self.save_layout.addWidget(self.format_combobox)
-        self.export_layout.addLayout(self.profile_layout)
+        self.export_layout.addWidget(self.profile_warning)
         self.export_layout.addLayout(self.save_layout)
+        self.export_layout.addWidget(self.save_button)
         self.management_layout.addWidget(self.load_button)
         self.management_layout.addWidget(self.file_tree)
         self.management_layout.addLayout(self.export_layout)
@@ -315,8 +330,7 @@ class EditingDisplay(QWidget):
         self.load_button.clicked.connect(self.open_load_dialog)
         self.save_button.clicked.connect(self.open_save_dialog)
         PIPELINE.rawLoaded.connect(self.update_current_filename_display)
-        PIPELINE.saveInitiated.connect(self.push_message)
-        PIPELINE.saveFinished.connect(self.push_message)
+        PIPELINE.messageRaised.connect(self.push_message)
         tp.copy_params_button.clicked.connect(self.copy_parameters)
         tp.paste_params_button.clicked.connect(self.paste_parameters)
         tp.pre_inv_rotate_left.clicked.connect(lambda: self.update_rotation(1))
@@ -467,6 +481,8 @@ class EditingDisplay(QWidget):
         global PIPELINE, LOADED_RAW_PATH
         # image_folder = QFileDialog.getExistingDirectory()
         current_format = self.format_combobox.currentData()
+        current_profile = self.profile_picker.currentData()
+        print(f"PROFILE: {current_profile}", file=sys.stderr)
         default_filter = "TIFF Files (*.tiff *.tif)"
         default_extension = "tiff"
         if current_format.startswith('j'):
@@ -479,7 +495,8 @@ class EditingDisplay(QWidget):
             image_path = new_dialog.selectedFiles()
             PIPELINE.save_final_image(image_to_save=LOADED_RAW_PATH,
                                       output_path=image_path[0],
-                                      image_format=current_format)
+                                      image_format=current_format,
+                                      icc_profile=current_profile)
 
     def update_current_filename_display(self, filename: str):
         self.current_file_label.setText(filename)

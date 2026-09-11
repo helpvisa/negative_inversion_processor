@@ -1,3 +1,18 @@
+# This file is part of Negative Inversion Processor.
+#
+# Negative Inversion Processor  is free software: you can redistribute it
+# and/or modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation, either version 3 of the License,
+# or (at your option) any later version.
+# 
+# Negative Inversion Processor is distributed in the hope that it will be
+# useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+# Public License for more details.
+# 
+# You should have received a copy of the GNU General Public License along with
+# Negative Inversion Processor. If not, see <https://www.gnu.org/licenses/>. 
+
 # pipeline to process image from load -> preview
 # custom class that stores:
 #     - source image (unmodifed)
@@ -7,11 +22,11 @@
 #         - inversion
 #         - grading
 #         - final
+
 import sys
 from pathlib import Path
 import numpy as np
 from scipy import ndimage
-from PIL import ImageCms
 from PySide6.QtCore import QObject, Signal, Slot
 from PySide6.QtWidgets import QMessageBox
 from deepdiff import DeepDiff
@@ -24,7 +39,7 @@ from processing import (load_raw_image, save_image, rotate_image,
                         convert_to_grayscale_from_g,
                         apply_addition, apply_gain, apply_division, apply_ffc)
 from custom_widgets import ColorPicker
-from colour_management import (filmic_tonemap, aces_tonemap, convert_to_sRGB)
+from colour_management import (aces_tonemap, convert_to_sRGB)
 from sidecars import update_sidecar, load_params_from_sidecar
 from global_vars import PHOTO_INDEX
 
@@ -32,11 +47,12 @@ from global_vars import PHOTO_INDEX
 # we must subclass QObject to leverage signals
 class ProcessingPipeline(QObject):
     rawLoaded = Signal(str)
-    saveInitiated = Signal(str)
-    saveFinished = Signal(str)
+    saveInitiated = Signal()
+    saveFinished = Signal()
     previewUpdated = Signal()
     editParamsUpdated = Signal()
     colorPicked = Signal(tuple[float, float, float])
+    messageRaised = Signal(str)
 
     def __init__(self, max_preview_size=1280, analysis_inset=0.8):
         super().__init__()
@@ -298,8 +314,11 @@ class ProcessingPipeline(QObject):
         self.threadpool.start(thread)
 
     def save_final_image(self, image_to_save: str,
-                         output_path: str = None, image_format: str = "f16"):
-        self.saveInitiated.emit(f"Writing {image_to_save} to {output_path}...")
+                         output_path: str = None,
+                         image_format: str = "f16",
+                         icc_profile: str = None):
+        self.saveInitiated.emit()
+        self.messageRaised.emit(f"Writing {image_to_save} to {output_path}...")
         print(f"Writing {image_to_save} to {output_path}...", file=sys.stderr)
 
         def process_and_save():
@@ -401,15 +420,35 @@ class ProcessingPipeline(QObject):
                 working_image *= ep.final_exposure
             if ep.tonemap:
                 working_image = aces_tonemap(working_image, toe=ep.toe)
-            # convert to sRGB; will provide option for custom colorspace soon
-            if working_image.ndim < 3:
-                working_image = np.stack((working_image,
-                                          working_image,
-                                          working_image), axis=-1)
-            working_image, sRGB_profile = convert_to_sRGB(working_image)
-            save_profile = ImageCms.ImageCmsProfile(sRGB_profile).tobytes()
+            # assign correct ICC profile
+            save_profile = None
+            current_root = Path(__file__).resolve().parent
+            icc_name = "Rec2020-elle-V4-g10.icc"
+            if icc_profile == 'rec2020':
+                if ep.bw_mode:
+                    icc_name = "Gray-elle-V4-g10.icc"
+            else:
+                if ep.bw_mode:
+                    icc_name = "Gray-elle-V4-g22.icc"
+                else:
+                    icc_name = "sRGB-elle-V4-g22.icc"
+                # also convert image to sRGB format
+                if working_image.ndim < 3:
+                    working_image = np.stack((working_image,
+                                              working_image,
+                                              working_image), axis=-1)
+                working_image, _ = convert_to_sRGB(working_image)
+            profile_path = current_root / ".." / "icc_profiles" / icc_name
+            try:
+                with open(profile_path, "rb") as icc_file:
+                    save_profile = icc_file.read()
+            except FileNotFoundError:
+                print("Rec.2020 Profile not found on disk!", file=sys.stderr)
+                self.messageRaised.emit("Rec.2020 profile not found on disk; "
+                                        "image being saved with no profile.")
             save_image(working_image, output_path, image_format, save_profile)
-            self.saveFinished.emit(f"Finished writing {image_to_save} to {output_path}.")
+            self.saveFinished.emit()
+            self.messageRaised.emit(f"Finished writing {image_to_save} to {output_path}.")
 
         thread = self.threadpool.instantiate_thread(process_and_save)
         self.threadpool.active_threads[thread.thread_id] = thread
