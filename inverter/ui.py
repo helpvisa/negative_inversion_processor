@@ -5,7 +5,7 @@ from PySide6.QtCore import Qt, Slot
 from PySide6.QtGui import QImage, QPixmap, QPalette, QColor
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget,
                                QVBoxLayout, QHBoxLayout,
-                               QLabel, QPushButton, QFileDialog,
+                               QLabel, QPushButton, QFileDialog, QDialog,
                                QGraphicsScene, QSplitter,
                                QCheckBox, QGroupBox, QScrollArea, QComboBox,
                                QSizePolicy, QTreeView)
@@ -475,8 +475,8 @@ class EditingDisplay(QWidget):
         new_dialog.setAcceptMode(QFileDialog.AcceptSave)
         new_dialog.setNameFilter(default_filter)
         new_dialog.setDefaultSuffix(default_extension)
-        image_path = new_dialog.exec()
-        if image_path:
+        if new_dialog.exec() == QDialog.DialogCode.Accepted:
+            image_path = new_dialog.selectedFiles()
             PIPELINE.save_final_image(image_to_save=LOADED_RAW_PATH,
                                       output_path=image_path[0],
                                       image_format=current_format)
