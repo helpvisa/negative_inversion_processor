@@ -114,6 +114,11 @@ class ToolPanel(QWidget):
         # --- pre-inversion layout (orientation and initial white balance)
         pre_inversion_groupbox = QGroupBox("Pre-Inversion")
         pre_inversion_layout = QVBoxLayout()
+        self.ffc_layout = QHBoxLayout()
+        self.ffc_label = QLabel("No FFC image loaded.")
+        self.ffc_button = QPushButton("Load FFC")
+        self.ffc_layout.addWidget(self.ffc_label)
+        self.ffc_layout.addWidget(self.ffc_button)
         self.crop_inset_slider = LabeledSlider("Crop Inset",
                                                0.0, 1.0, 1.0, 300)
         self.crop_shift_layout = QHBoxLayout()
@@ -129,6 +134,7 @@ class ToolPanel(QWidget):
         self.pre_inv_orientation_layout.addWidget(self.pre_inv_rotate_left)
         self.pre_inv_orientation_layout.addWidget(self.pre_inv_rotate_right)
         self.pre_inv_wb_picker = ColorPicker("Dmin - Base Color", Stage.PRE_INV)
+        pre_inversion_layout.addLayout(self.ffc_layout)
         pre_inversion_layout.addWidget(self.crop_inset_slider)
         pre_inversion_layout.addLayout(self.crop_shift_layout)
         pre_inversion_layout.addLayout(self.pre_inv_orientation_layout)
@@ -331,6 +337,7 @@ class EditingDisplay(QWidget):
         self.save_button.clicked.connect(self.open_save_dialog)
         PIPELINE.rawLoaded.connect(self.update_current_filename_display)
         PIPELINE.messageRaised.connect(self.push_message)
+        tp.ffc_button.clicked.connect(self.open_ffc_selection_dialog)
         tp.copy_params_button.clicked.connect(self.copy_parameters)
         tp.paste_params_button.clicked.connect(self.paste_parameters)
         tp.pre_inv_rotate_left.clicked.connect(lambda: self.update_rotation(1))
@@ -403,6 +410,7 @@ class EditingDisplay(QWidget):
         global PIPELINE, LOADED_RAW_PATH
         ep = self.edit_params
         tp = self.tool_panel
+        ep.ffc_image = tp.ffc_label.text()
         ep.crop_inset = tp.crop_inset_slider.value()
         ep.crop_shift_h = tp.crop_shift_h_slider.value()
         ep.crop_shift_v = tp.crop_shift_v_slider.value()
@@ -432,6 +440,7 @@ class EditingDisplay(QWidget):
         self.edit_params = PIPELINE.edit_params.copy()
         ep = self.edit_params
         tp = self.tool_panel
+        tp.ffc_label.setText(ep.ffc_image)
         tp.crop_inset_slider.setValue(ep.crop_inset)
         tp.crop_shift_h_slider.setValue(ep.crop_shift_h)
         tp.crop_shift_v_slider.setValue(ep.crop_shift_v)
@@ -452,6 +461,22 @@ class EditingDisplay(QWidget):
         tp.exposure_slider.setValue(ep.final_exposure)
         tp.tonemap_checkbox.setChecked(ep.tonemap)
         tp.toe_slider.setValue(ep.toe)
+
+
+    def open_ffc_selection_dialog(self):
+        global PIPELINE
+        filter_string = "Camera RAW ("
+        filter_string += " ".join(f"*.{e}" for e in RAW_EXTENSIONS)
+        filter_string += ");; All Files (*)"
+        image_path, _ = QFileDialog.getOpenFileName(
+            None,
+            caption="Select RAW File",
+            filter=filter_string
+        )
+        self.tool_panel.ffc_label.setText(image_path)
+        self.push_message(f"FFC image set to {image_path}.")
+        self.update_edit_params()
+
 
     def open_load_dialog(self):
         global PIPELINE, LOADED_RAW_PATH

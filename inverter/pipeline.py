@@ -83,6 +83,10 @@ class ProcessingPipeline(QObject):
     def process_image(self, new_edit_params, force_refresh=False):
         if force_refresh:
             self.edit_params = new_edit_params
+            if self.edit_params.ffc_image:
+                self.load_ffc_file(self.edit_params.ffc_image)
+                # wait until the ffc image is actually loaded
+                self.threadpool.waitForDone()
             self.pre_inv_process(preview=True)
         else:
             difference = DeepDiff(self.edit_params, new_edit_params)
@@ -113,6 +117,13 @@ class ProcessingPipeline(QObject):
                                  'root.wb_blue']
                 tonemap_changes = ['root.final_exposure', 'root.tonemap',
                                    'root.toe']
+                if 'root.ffc_image' in pre_inv_changes:
+                    if self.edit_params.ffc_image:
+                        self.load_ffc_file(self.edit_params.ffc_image)
+                        # wait until the ffc image is actually loaded
+                        # this freezes the UI but it's quick enough that
+                        # I don't care to design around it at the moment
+                        self.threadpool.waitForDone()
                 if any(key in changes for key in pre_inv_changes) or \
                    any(key in type_changes for key in pre_inv_changes):
                     self.pre_inv_process(preview=True)
@@ -137,10 +148,10 @@ class ProcessingPipeline(QObject):
             else:
                 self.rotation_inter = self.source_image
             if ep.ffc_image:
-                if preview:
+                if preview and self.ffc_image_small is not None:
                     self.rotation_inter = apply_ffc(self.rotation_inter,
                                                     self.ffc_image_small)
-                else:
+                elif self.ffc_image is not None:
                     self.rotation_inter = apply_ffc(self.rotation_inter,
                                                     self.ffc_image)
             # apply crop inset
@@ -336,9 +347,10 @@ class ProcessingPipeline(QObject):
                           file=sys.stderr)
                     ep = load_params_from_sidecar(image_to_save)
             # pre-inversion
-            # ffc_image = ep.ffc_image if self.ffc_image else None
-            # if ffc_image:
-                # working_image = apply_ffc(working_image, ffc_image)
+            # apply ffc
+            if ep.ffc_image:
+                loaded_ffc_raw = load_raw_image(ep.ffc_image).astype(np.float32) / 65535.0
+                working_image = apply_ffc(working_image, loaded_ffc_raw)
             # apply crop inset
             if ep.crop_inset < 1.0:
                 crop_height = int(current_height * ep.crop_inset)
@@ -517,27 +529,27 @@ class ProcessingPipeline(QObject):
             thread.signals.finished.connect(self.threadpool.remove_thread)
             self.threadpool.start(thread)
 
+    @Slot()
     def load_ffc_file(self, image_path):
         # load raw file for flat-field correction
         if image_path:
             def init_func():
-                raw = load_raw_image(image_path).astype(np.float32) / 65535.0
-                return raw
-
-            def post_func(image_data):
+                self.messageRaised.emit(f"Loading FFC image from {image_path}...")
+                image_data = load_raw_image(image_path).astype(np.float32) / 65535.0
                 self.ffc_image = image_data
                 self.ffc_image_small = ndimage.zoom(image_data,
                                                     (self.preview_scale,
                                                      self.preview_scale, 1),
                                                     order=0)
+                self.messageRaised.emit("FFC image loaded from disk.")
 
             def error_func(e):
                 exctype, value, error = e
                 QMessageBox.critical(self, "Error processing FFC image!", error)
+                self.messageRaised.emit("Error processing FFC image! Aborting.")
 
             thread = self.threadpool.instantiate_thread(init_func)
             self.threadpool.active_threads[thread.thread_id] = thread
-            thread.signals.result.connect(post_func)
             thread.signals.error.connect(error_func)
             thread.signals.finished.connect(self.threadpool.remove_thread)
             self.threadpool.start(thread)
