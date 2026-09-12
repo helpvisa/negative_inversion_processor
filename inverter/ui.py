@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget,
                                QLabel, QPushButton, QFileDialog, QDialog,
                                QGraphicsScene, QSplitter,
                                QCheckBox, QGroupBox, QScrollArea, QComboBox,
-                               QSizePolicy, QTreeView)
+                               QSizePolicy, QListWidget)
 from custom_widgets import ImageView, LabeledSlider, ColorPicker
 from colour_management import convert_to_sRGB
 from edit_params import EditParams, Stage
@@ -256,7 +256,6 @@ class EditingDisplay(QWidget):
         super().__init__(parent)
         # internal tracking vars
         self.edit_params = EditParams()
-        PIPELINE.editParamsUpdated.connect(self.set_edit_params_from_pipeline)
 
         # image preview / canvas
         self.image_preview = PrimaryImageView(self)
@@ -268,6 +267,7 @@ class EditingDisplay(QWidget):
                                               QSizePolicy.Policy.Fixed)
         self.current_file_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.load_button = QPushButton("Load Image")
+        self.load_folder_button = QPushButton("Load Roll (Folder)")
         self.profile_warning = QLabel("NIP processes all images in Linear Rec.2020.")
         self.profile_picker = QComboBox()
         self.profile_picker.addItem("sRGB Gamma 2.2",
@@ -281,8 +281,7 @@ class EditingDisplay(QWidget):
             self.format_combobox.addItem(item['display'],
                                          userData=item['data'])
         # file management side panel
-        # we pass self so QTreeView is freed if EditingDisplay ever dies
-        self.file_tree = QTreeView(self)
+        self.file_list = QListWidget()
         # editing side panel
         self.scrollable_sidebar = QScrollArea()
         self.scrollable_sidebar.setWidgetResizable(True)
@@ -305,15 +304,18 @@ class EditingDisplay(QWidget):
         # setup file management layout
         self.management_sidebar = QWidget()
         self.management_layout = QVBoxLayout()
+        self.load_layout = QHBoxLayout()
         self.export_layout = QVBoxLayout()
-        self.save_layout = QHBoxLayout()
-        self.save_layout.addWidget(self.profile_picker)
-        self.save_layout.addWidget(self.format_combobox)
+        self.format_layout = QHBoxLayout()
+        self.load_layout.addWidget(self.load_button)
+        self.load_layout.addWidget(self.load_folder_button)
+        self.format_layout.addWidget(self.profile_picker)
+        self.format_layout.addWidget(self.format_combobox)
         self.export_layout.addWidget(self.profile_warning)
-        self.export_layout.addLayout(self.save_layout)
+        self.export_layout.addLayout(self.format_layout)
         self.export_layout.addWidget(self.save_button)
-        self.management_layout.addWidget(self.load_button)
-        self.management_layout.addWidget(self.file_tree)
+        self.management_layout.addLayout(self.load_layout)
+        self.management_layout.addWidget(self.file_list)
         self.management_layout.addLayout(self.export_layout)
         self.management_sidebar.setLayout(self.management_layout)
         # editing layout
@@ -335,8 +337,11 @@ class EditingDisplay(QWidget):
         # ep = self.edit_params
         self.load_button.clicked.connect(self.open_load_dialog)
         self.save_button.clicked.connect(self.open_save_dialog)
+        self.file_list.itemDoubleClicked.connect(self.handle_list_view_doubleclick)
         PIPELINE.rawLoaded.connect(self.update_current_filename_display)
         PIPELINE.messageRaised.connect(self.push_message)
+        PIPELINE.editParamsUpdated.connect(self.set_edit_params_from_pipeline)
+        PIPELINE.photoIndexUpdated.connect(self.update_list_view)
         tp.ffc_button.clicked.connect(self.open_ffc_selection_dialog)
         tp.copy_params_button.clicked.connect(self.copy_parameters)
         tp.paste_params_button.clicked.connect(self.paste_parameters)
@@ -463,6 +468,17 @@ class EditingDisplay(QWidget):
         tp.toe_slider.setValue(ep.toe)
 
 
+    def trigger_raw_load(self, image_path):
+        global LOADED_RAW_PATH
+        if image_path:
+            self.push_message(f"Loading {image_path} from disk.")
+            PIPELINE.load_raw_file(image_path)
+            LOADED_RAW_PATH = image_path
+
+    def handle_list_view_doubleclick(self, list_widget: QListWidget):
+        raw_text = list_widget.text()
+        self.trigger_raw_load(raw_text)
+
     def open_ffc_selection_dialog(self):
         global PIPELINE
         filter_string = "Camera RAW ("
@@ -488,9 +504,7 @@ class EditingDisplay(QWidget):
             caption="Select RAW File",
             filter=filter_string
         )
-        self.push_message(f"Loading {image_path} from disk.")
-        PIPELINE.load_raw_file(image_path)
-        LOADED_RAW_PATH = image_path
+        self.trigger_raw_load(image_path)
 
     def open_load_folder_dialog(self):
         global PIPELINE, LOADED_RAW_PATH
@@ -523,6 +537,12 @@ class EditingDisplay(QWidget):
                                       output_path=image_path[0],
                                       image_format=current_format,
                                       icc_profile=current_profile)
+
+    def update_list_view(self):
+        self.file_list.clear()
+        for entry in PHOTO_INDEX:
+            self.file_list.addItem(entry)
+        pass
 
     def update_current_filename_display(self, filename: str):
         self.current_file_label.setText(filename)

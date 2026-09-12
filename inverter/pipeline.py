@@ -51,6 +51,7 @@ class ProcessingPipeline(QObject):
     saveFinished = Signal()
     previewUpdated = Signal()
     editParamsUpdated = Signal()
+    photoIndexUpdated = Signal()
     colorPicked = Signal(tuple[float, float, float])
     messageRaised = Signal(str)
 
@@ -83,6 +84,7 @@ class ProcessingPipeline(QObject):
     def process_image(self, new_edit_params, force_refresh=False):
         if force_refresh:
             self.edit_params = new_edit_params
+            PHOTO_INDEX[self.currently_loaded_filename]['edit_params'] = self.edit_params
             if self.edit_params.ffc_image:
                 self.load_ffc_file(self.edit_params.ffc_image)
                 # wait until the ffc image is actually loaded
@@ -513,6 +515,7 @@ class ProcessingPipeline(QObject):
                     self.edit_params = load_params_from_sidecar(name)
                     ref["edit_params"] = self.edit_params
                 self.editParamsUpdated.emit()
+                self.photoIndexUpdated.emit()
                 self.process_image(self.edit_params, force_refresh=True)
 
             def error_func(e):
