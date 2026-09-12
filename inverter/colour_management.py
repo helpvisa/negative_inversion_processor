@@ -22,18 +22,11 @@ from processing import convert_to_grayscale
 from global_vars import REC2020_WEIGHTS
 
 
-def simple_tonemap(image_data, contrast: float = 1.0):
-    """
-    Simple contrast curve.
-    """
-    v = image_data
-    curve = v * v * (3 - 2 * v)
-    return np.clip((1 - contrast) * v + contrast * curve, 0.0, 1.0)
-
 def noritsu_tonemap(image_data, contrast: float = 1.0, toe: float = 0.0):
     """
     Affect overall tone using 'noritsu-style' tone curve
     https://github.com/rohanpandula/noritsu-tool/blob/main/noritsu/render.py
+    See THIRD_PARTY_LICENSES.txt for more details.
     """
     v = image_data
     # affect overall tone using 'noritsu-style' tone curve
@@ -59,8 +52,8 @@ def aces_tonemap(image_data, toe: float = 0.0):
     ACES-style tonemapping from HDR to 0.0 <-> 1.0.
     Converts to ACES colour space before re-converting back to Linear Rec.2020.
 
-    See https://github.com/TheRealMJP/BakingLab/blob/master/BakingLab/ACES.hlsl
-    (^ MIT License)
+    https://github.com/TheRealMJP/BakingLab/blob/master/BakingLab/ACES.hlsl
+    See THIRD_PARTY_LICENSES.txt for more details.
     """
     # linear rec.2020 -> aces matrix
     mat_in = np.array([
