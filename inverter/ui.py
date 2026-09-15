@@ -23,12 +23,13 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget,
                                QLabel, QPushButton, QFileDialog, QDialog,
                                QGraphicsScene, QSplitter,
                                QCheckBox, QGroupBox, QScrollArea, QComboBox,
-                               QSizePolicy, QListWidget)
+                               QSizePolicy, QListWidget, QMessageBox)
 from custom_widgets import ImageView, LabeledSlider, ColorPicker
 from colour_management import convert_to_sRGB
 from edit_params import EditParams, Stage
 from pipeline import ProcessingPipeline
 from processing import estimate_inversion_ratios
+from sidecars import load_params_from_sidecar, update_sidecar
 from global_vars import GLOBAL_FLAGS, PHOTO_INDEX, SAVE_FORMATS, RAW_EXTENSIONS
 
 
@@ -214,7 +215,7 @@ class ToolPanel(QWidget):
         grading_tune_layout.addWidget(self.red_tune_slider)
         grading_tune_layout.addWidget(self.green_tune_slider)
         grading_tune_layout.addWidget(self.blue_tune_slider)
-        self.grading_wb_picker = ColorPicker("Pick White Balance", Stage.GRADE,
+        self.grading_wb_picker = ColorPicker("Pick White Balance", Stage.GAIN_GRADE,
                                              hide_value=True)
         custom_grading_layout.addLayout(grading_gain_layout)
         custom_grading_layout.addLayout(grading_tune_layout)
@@ -268,6 +269,7 @@ class EditingDisplay(QWidget):
         self.current_file_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.load_button = QPushButton("Load Image")
         self.load_folder_button = QPushButton("Load Roll (Folder)")
+        self.paste_parameters_to_roll_button = QPushButton("Paste Current Parameters to Entire Roll")
         self.profile_warning = QLabel("NIP processes all images in Linear Rec.2020.")
         self.profile_picker = QComboBox()
         self.profile_picker.addItem("sRGB Gamma 2.2",
@@ -315,6 +317,7 @@ class EditingDisplay(QWidget):
         self.export_layout.addLayout(self.format_layout)
         self.export_layout.addWidget(self.save_button)
         self.management_layout.addLayout(self.load_layout)
+        self.management_layout.addWidget(self.paste_parameters_to_roll_button)
         self.management_layout.addWidget(self.file_list)
         self.management_layout.addLayout(self.export_layout)
         self.management_sidebar.setLayout(self.management_layout)
@@ -336,6 +339,8 @@ class EditingDisplay(QWidget):
         ip = self.image_preview
         # ep = self.edit_params
         self.load_button.clicked.connect(self.open_load_dialog)
+        self.load_folder_button.clicked.connect(self.open_load_folder_dialog)
+        self.paste_parameters_to_roll_button.clicked.connect(self.paste_parameters_to_entire_index)
         self.save_button.clicked.connect(self.open_save_dialog)
         self.file_list.itemDoubleClicked.connect(self.handle_list_view_doubleclick)
         PIPELINE.rawLoaded.connect(self.update_current_filename_display)
@@ -408,8 +413,35 @@ class EditingDisplay(QWidget):
         global CLIPBOARD, PIPELINE
         if CLIPBOARD and PIPELINE:
             self.push_message("Image parameters pasted from clipboard.")
-            PIPELINE.process_image(CLIPBOARD.copy(), force_refresh=True)
+            new_edit_params = CLIPBOARD.copy()
+            # do NOT copy rotation, it would be annoying
+            new_edit_params.rotation = 0
+            PIPELINE.process_image(new_edit_params.copy(), force_refresh=True)
             self.set_edit_params_from_pipeline()
+
+    def paste_parameters_to_entire_index(self):
+        global CLIPBOARD
+
+        # first make sure user understands what they're doing
+        reply = QMessageBox.question(self,
+                                     "WARNING",
+                                     "This will copy the parameters in your "
+                                     "clipboard to every image in the file "
+                                     "list, updating their sidecars in the "
+                                     "process. Please confirm you want to do "
+                                     "this.")
+        if reply == QMessageBox.StandardButton.No:
+            print("NOT copying parameters to entire roll!", file=sys.stderr)
+            return
+        print("Copying parameters to entire roll!", file=sys.stderr)
+        
+        if CLIPBOARD:
+            self.push_message("Applied clipboard parameters to entire roll.")
+            new_edit_params = CLIPBOARD.copy()
+            new_edit_params.rotation = 0
+            for entry in PHOTO_INDEX:
+                PHOTO_INDEX[entry]['edit_params'] = new_edit_params.copy()
+                update_sidecar(entry)
 
     def update_edit_params(self):
         global PIPELINE, LOADED_RAW_PATH
@@ -507,14 +539,24 @@ class EditingDisplay(QWidget):
         self.trigger_raw_load(image_path)
 
     def open_load_folder_dialog(self):
-        global PIPELINE, LOADED_RAW_PATH
-        selected_path, _ = QFileDialog.getExistingDirectory()
+        selected_path = QFileDialog.getExistingDirectory()
         folder_path = Path(selected_path)
-        files = [f for f in folder_path.iterdir() if f.is_file()]
+        # reset the photo index (include only current folder)
+        # this is why I called them "evil mutable global variables" >:^) hehe
+        PHOTO_INDEX.clear()
+        # [1:] required to strip period at start of f.suffix.lower()
+        files = [f for f in folder_path.iterdir() if \
+                 f.is_file() and f.suffix.lower()[1:] in RAW_EXTENSIONS]
+        print(files, file=sys.stderr)
         for f in files:
+            name = str(f)
             # load each file into the PHOTO_INDEX
-            # PIPELINE.load_raw_file_to_index(f)
-            pass
+            PHOTO_INDEX[name] = {}
+            if 'edit_params' not in PHOTO_INDEX[name]:
+                print(f"Loading edit_params from sidecar for {name}.",
+                      file=sys.stderr)
+                PHOTO_INDEX[name]['edit_params'] = load_params_from_sidecar(name)
+        self.update_list_view()
 
     def open_save_dialog(self):
         global PIPELINE, LOADED_RAW_PATH
@@ -540,9 +582,10 @@ class EditingDisplay(QWidget):
 
     def update_list_view(self):
         self.file_list.clear()
-        for entry in PHOTO_INDEX:
+        # sort the PHOTO_INDEX dictionary before redisplay
+        sorted_dictionary = dict(sorted(PHOTO_INDEX.items()))
+        for entry in sorted_dictionary:
             self.file_list.addItem(entry)
-        pass
 
     def update_current_filename_display(self, filename: str):
         self.current_file_label.setText(filename)

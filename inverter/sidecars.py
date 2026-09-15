@@ -13,10 +13,8 @@
 # You should have received a copy of the GNU General Public License along with
 # Negative Inversion Processor. If not, see <https://www.gnu.org/licenses/>. 
 
-import os
 import sys
 import json
-from pathlib import Path
 import numpy as np
 from edit_params import EditParams
 from global_vars import PHOTO_INDEX
@@ -107,7 +105,7 @@ def load_params_from_sidecar(filepath):
                 ep.toe = sidecar['toe']
                 return ep
         except FileNotFoundError:
-            print("No sidebar file found. Returning blank edit params.",
+            print("No sidecar file found. Returning blank edit params.",
                   file=sys.stderr)
             return EditParams()
         except KeyError as e:

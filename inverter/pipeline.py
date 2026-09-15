@@ -77,6 +77,7 @@ class ProcessingPipeline(QObject):
         self.pre_inv_inter = []
         self.inv_inter = []
         self.ratio_inter = []
+        self.grade_gain_inter = []
         self.grade_inter = []
 
     # perform a deep comparison of self.edit_params and the new EditParams
@@ -270,6 +271,7 @@ class ProcessingPipeline(QObject):
 
         def current():
             self.grade_inter = self.ratio_inter.copy()
+            self.grade_gain_inter = self.ratio_inter.copy()
             # first apply grade
             if not ep.bw_mode:
                 # gain
@@ -279,6 +281,7 @@ class ProcessingPipeline(QObject):
                                                       gain_tuple)
                 else:
                     self.grade_inter = apply_gain(self.grade_inter, gain_tuple)
+                self.grade_gain_inter = self.grade_inter.copy()
                 # tune (addition)
                 add_tuple = (ep.wb_red, ep.wb_green, ep.wb_blue)
                 # if ep.skip_inversion:
@@ -475,19 +478,11 @@ class ProcessingPipeline(QObject):
             def init_func():
                 raw = load_raw_image(image_path).astype(np.float32) / 65535.0
                 self.currently_loaded_filename = image_path
-                if image_path in PHOTO_INDEX:
-                    ref = PHOTO_INDEX[image_path]
-                    height, width = ref['height'], ref['width']
-                    self.raw_width = width
-                    self.raw_height = height
-                else:
-                    height, width, _ = raw.shape
-                    self.raw_width = width
-                    self.raw_height = height
-                    PHOTO_INDEX[image_path] = {
-                        "width": width,
-                        "height": height,
-                    }
+                if image_path not in PHOTO_INDEX:
+                    PHOTO_INDEX[image_path] = {}
+                height, width, _ = raw.shape
+                self.raw_width = width
+                self.raw_height = height
                 if width > height:
                     self.preview_scale = self.max_preview_size / width
                 else:
@@ -576,7 +571,11 @@ class ProcessingPipeline(QObject):
             value = average_sample_point(self.ratio_inter,
                                          point_x, point_y, 16)
             picker.update_color(value)
+        elif stage == Stage.GAIN_GRADE:
+            value = average_sample_point(self.grade_gain_inter,
+                                         point_x, point_y, 16)
+            picker.update_color(value)
         else:
             value = average_sample_point(self.grade_inter,
                                          point_x, point_y, 16)
-        picker.update_color(value)
+            picker.update_color(value)

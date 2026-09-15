@@ -21,11 +21,12 @@ import numpy.typing as npt
 
 
 class Stage(IntEnum):
-    PRE_INV = 0
-    INV     = 1
-    RATIO   = 2
-    GRADE   = 3
-    FINAL   = 4
+    PRE_INV    = 0
+    INV        = 1
+    RATIO      = 2
+    GRADE      = 3
+    GAIN_GRADE = 4
+    FINAL      = 5
 
 
 @dataclass

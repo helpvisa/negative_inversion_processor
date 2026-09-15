@@ -36,7 +36,5 @@ RAW_EXTENSIONS= [
 # index of photos that have been loaded
 # layout for each entry is:
 #   - file_name (index)
-#   - width
-#   - height
 #   - edit_params
 PHOTO_INDEX = dict()
