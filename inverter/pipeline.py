@@ -87,6 +87,7 @@ class ProcessingPipeline(QObject):
             self.edit_params = new_edit_params
             PHOTO_INDEX[self.currently_loaded_filename]['edit_params'] = self.edit_params
             if self.edit_params.ffc_image:
+                print("Forcing refresh!", file=sys.stderr)
                 self.load_ffc_file(self.edit_params.ffc_image)
                 # wait until the ffc image is actually loaded
                 self.threadpool.waitForDone()
@@ -120,7 +121,8 @@ class ProcessingPipeline(QObject):
                                  'root.wb_blue']
                 tonemap_changes = ['root.final_exposure', 'root.tonemap',
                                    'root.toe']
-                if 'root.ffc_image' in pre_inv_changes:
+                if 'root.ffc_image' in changes or 'root.ffc_image' in type_changes:
+                    print("ffc_image changed!", file=sys.stderr)
                     if self.edit_params.ffc_image:
                         self.load_ffc_file(self.edit_params.ffc_image)
                         # wait until the ffc image is actually loaded

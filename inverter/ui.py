@@ -260,6 +260,9 @@ class EditingDisplay(QWidget):
 
         # image preview / canvas
         self.image_preview = PrimaryImageView(self)
+        self.performing_batch_export = False
+        self.images_to_export = 0
+        self.images_exported = 0
 
         # controls
         # demo controls
@@ -277,6 +280,7 @@ class EditingDisplay(QWidget):
         self.profile_picker.addItem("Linear Rec.2020 Gamma 1.0",
                                     userData="rec2020")
         self.save_button = QPushButton("Save Processed Image")
+        self.batch_export_button = QPushButton("Export Entire Roll")
         self.format_combobox = QComboBox()
         # add items to combobox
         for item in SAVE_FORMATS:
@@ -316,6 +320,7 @@ class EditingDisplay(QWidget):
         self.export_layout.addWidget(self.profile_warning)
         self.export_layout.addLayout(self.format_layout)
         self.export_layout.addWidget(self.save_button)
+        self.export_layout.addWidget(self.batch_export_button)
         self.management_layout.addLayout(self.load_layout)
         self.management_layout.addWidget(self.paste_parameters_to_roll_button)
         self.management_layout.addWidget(self.file_list)
@@ -342,11 +347,13 @@ class EditingDisplay(QWidget):
         self.load_folder_button.clicked.connect(self.open_load_folder_dialog)
         self.paste_parameters_to_roll_button.clicked.connect(self.paste_parameters_to_entire_index)
         self.save_button.clicked.connect(self.open_save_dialog)
+        self.batch_export_button.clicked.connect(self.open_batch_export_dialog)
         self.file_list.itemDoubleClicked.connect(self.handle_list_view_doubleclick)
         PIPELINE.rawLoaded.connect(self.update_current_filename_display)
         PIPELINE.messageRaised.connect(self.push_message)
         PIPELINE.editParamsUpdated.connect(self.set_edit_params_from_pipeline)
         PIPELINE.photoIndexUpdated.connect(self.update_list_view)
+        PIPELINE.saveFinished.connect(self.update_batch_export_status)
         tp.ffc_button.clicked.connect(self.open_ffc_selection_dialog)
         tp.copy_params_button.clicked.connect(self.copy_parameters)
         tp.paste_params_button.clicked.connect(self.paste_parameters)
@@ -560,10 +567,8 @@ class EditingDisplay(QWidget):
 
     def open_save_dialog(self):
         global PIPELINE, LOADED_RAW_PATH
-        # image_folder = QFileDialog.getExistingDirectory()
         current_format = self.format_combobox.currentData()
         current_profile = self.profile_picker.currentData()
-        print(f"PROFILE: {current_profile}", file=sys.stderr)
         default_filter = "TIFF Files (*.tiff *.tif)"
         default_extension = "tiff"
         if current_format.startswith('j'):
@@ -579,6 +584,39 @@ class EditingDisplay(QWidget):
                                       output_path=image_path[0],
                                       image_format=current_format,
                                       icc_profile=current_profile)
+
+    def open_batch_export_dialog(self):
+        global PIPELINE
+        current_format = self.format_combobox.currentData()
+        current_profile = self.profile_picker.currentData()
+        selected_path = QFileDialog.getExistingDirectory()
+        if selected_path:
+            self.push_message("Initiating batch export!")
+            folder_path = Path(selected_path)
+            images_to_export = 0
+            for entry in PHOTO_INDEX:
+                images_to_export += 1
+                entry_path = Path(entry)
+                new_suffix = ".tiff"
+                if current_format == "ju8":
+                    new_suffix = ".jpg"
+                final_path = folder_path / f"{entry_path.stem}{new_suffix}"
+                PIPELINE.save_final_image(image_to_save=entry,
+                                          output_path=final_path,
+                                          image_format=current_format,
+                                          icc_profile=current_profile)
+            self.images_to_export = images_to_export
+            self.performing_batch_export = True
+
+    def update_batch_export_status(self):
+        if self.performing_batch_export:
+            self.images_exported += 1
+            self.push_message(f"Exported {self.images_exported} of "
+                              f"{self.images_to_export}.")
+            if self.images_exported >= self.images_to_export:
+                self.performing_batch_export = False
+                self.push_message("Finished exporting all images!")
+            
 
     def update_list_view(self):
         self.file_list.clear()
