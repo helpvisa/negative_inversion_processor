@@ -4,8 +4,3 @@
     - for theoretical use with film print LUTs
     - curious in general to know what this would look like
     - raw Linear Rec.2020 working image
-
-## GUI
-- folder batch loading / exporting / sidebar explorer + previewer
-    - stretch goal: include sliders on each individual preview for ez grading
-- tree view for loaded folders?
