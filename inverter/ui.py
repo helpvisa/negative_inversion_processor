@@ -421,8 +421,6 @@ class EditingDisplay(QWidget):
         if CLIPBOARD and PIPELINE:
             self.push_message("Image parameters pasted from clipboard.")
             new_edit_params = CLIPBOARD.copy()
-            # do NOT copy rotation, it would be annoying
-            new_edit_params.rotation = 0
             PIPELINE.process_image(new_edit_params.copy(), force_refresh=True)
             self.set_edit_params_from_pipeline()
 
@@ -445,7 +443,6 @@ class EditingDisplay(QWidget):
         if CLIPBOARD:
             self.push_message("Applied clipboard parameters to entire roll.")
             new_edit_params = CLIPBOARD.copy()
-            new_edit_params.rotation = 0
             for entry in PHOTO_INDEX:
                 PHOTO_INDEX[entry]['edit_params'] = new_edit_params.copy()
                 update_sidecar(entry)
