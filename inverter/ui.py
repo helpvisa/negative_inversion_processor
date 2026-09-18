@@ -360,22 +360,17 @@ class EditingDisplay(QWidget):
         tp.pre_inv_rotate_left.clicked.connect(lambda: self.update_rotation(1))
         tp.pre_inv_rotate_right.clicked.connect(lambda: self.update_rotation(-1))
         tp.estimate_ratios_button.clicked.connect(self.estimate_ratios)
-        # this is super weird and fragile with many edge cases
+        # this is kinda weird in practice
         # i.e. two pickers can be activated at once
         # but I think I actually kinda like that?
         # allow pickers to trigger picker mode
         tp.pre_inv_wb_picker.pickRequested.connect(ip.view.enable_pick_mode)
         tp.pre_inv_wb_picker.valueChanged.connect(PIPELINE.pick_color_from_image)
-        # tp.pivot_picker.pickRequested.connect(ip.view.enable_pick_mode)
-        # tp.pivot_picker.valueChanged.connect(PIPELINE.pick_color_from_image)
         tp.grading_wb_picker.pickRequested.connect(ip.view.enable_pick_mode)
         tp.grading_wb_picker.valueChanged.connect(PIPELINE.pick_color_from_image)
         # allow view to send values back
-        # ip.view.pointPicked.connect(tp.pivot_picker.finish_pick)
         ip.view.pointPicked.connect(tp.pre_inv_wb_picker.finish_pick)
         ip.view.pointPicked.connect(tp.grading_wb_picker.finish_pick)
-        # update pivot if pivot picked
-        # tp.pivot_picker.colorChanged.connect(self.update_pivot)
         # update grading panel if grading wb picked
         tp.grading_wb_picker.colorChanged.connect(self.update_grading_panel)
         # update_edit_params on change of any subvalue of ToolPanel

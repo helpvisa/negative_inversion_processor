@@ -14,6 +14,7 @@
 # Negative Inversion Processor. If not, see <https://www.gnu.org/licenses/>. 
 
 import sys
+import math
 import rawpy
 import tifffile
 import numpy as np
@@ -138,14 +139,13 @@ def divide_by_image(a_data: np.ndarray, b_data: np.ndarray):
 
 
 def apply_ffc(image_data: np.ndarray, ffc_data: np.ndarray,
-              strength: float = 1.0) -> np.ndarray:
-    print(f"Applying flat-field correction (strength {strength})",
-          file=sys.stderr)
+              strength: float = 1.0, makeup_gain: bool = True) -> np.ndarray:
+    print("Applying flat-field correction!", file=sys.stderr)
     scalar = np.median(ffc_data)
-    corrected_image = divide_by_image(image_data,
-                                      ffc_data * strength)
+    corrected_image = divide_by_image(image_data, ffc_data) * strength
     # apply gain correction
-    corrected_image = corrected_image * scalar
+    if makeup_gain:
+        corrected_image = corrected_image * scalar
     return corrected_image
 
 
@@ -188,15 +188,14 @@ def invert_to_density(image_data):
     be further corrected before having its densities mapped back to linear
     luminance.
     """
-    # we calculate density from "transmittance" using log10(1/x)
+    # we calculate density from "transmittance" using -log10(x)
     # see https://abpy.github.io/2023/08/20/color-neg.html
-    # clip rgb values to avoid discolouration outside the negative itself,
-    # which should theoretically still be within a 0 - 1 range at this point
-    return np.log10(1 / np.clip(image_data, a_min=1e-3, a_max=1.0))
+    # clamp rgb values to avoid divide by zero
+    return -np.log10(np.clip(image_data, a_min=1e-6, a_max=math.inf))
 
 
 def to_density(image_data):
-    return np.log10(image_data)
+    return np.log10(np.clip(image_data, a_min=1e-6, a_max=math.inf))
 
 
 def density_to_luminance(image_data, scale=0.01):

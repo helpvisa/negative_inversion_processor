@@ -3,8 +3,14 @@
 
 # working folders
 __pycache__/
+
 # working files
 *.swp
 *.swo
 *.tiff
 *.xmp
+
+# testing files
+*.nef
+*.NEF
+*.nip.json
