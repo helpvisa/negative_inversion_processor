@@ -14,7 +14,6 @@
 # Negative Inversion Processor. If not, see <https://www.gnu.org/licenses/>. 
 
 import sys
-import math
 import rawpy
 import tifffile
 import numpy as np
@@ -191,11 +190,11 @@ def invert_to_density(image_data):
     # we calculate density from "transmittance" using -log10(x)
     # see https://abpy.github.io/2023/08/20/color-neg.html
     # clamp rgb values to avoid divide by zero
-    return -np.log10(np.clip(image_data, a_min=1e-6, a_max=math.inf))
+    return np.log10(1 / np.clip(image_data, a_min=1e-3, a_max=1.0))
 
 
 def to_density(image_data):
-    return np.log10(np.clip(image_data, a_min=1e-6, a_max=math.inf))
+    return np.log10(np.clip(image_data, a_min=1e-3, a_max=1.0))
 
 
 def density_to_luminance(image_data, scale=0.01):
@@ -401,7 +400,7 @@ def process_all_adjustments(image_data, adjustments):
             print("PROCESS: invert to density",
                   file=sys.stderr)
             working_data = invert_to_density(working_data)
-        elif type == "density_to_luminance":
+        elif type == "density_luminance":
             print("PROCESS: density to luminance",
                   file=sys.stderr)
             working_data = density_to_luminance(working_data)

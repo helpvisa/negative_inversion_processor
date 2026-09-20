@@ -108,7 +108,7 @@ class Densitometer(QObject):
         self.image = None
         self.base_density = None
         self.density_analysis = None
-        self.density_mode = 
+        # self.density_mode = 
 
     def density_to_zone(self, density: np.ndarray):
         # zones from zone system, in order (0 - 10)
@@ -182,7 +182,7 @@ class Densitometer(QObject):
     def pick_density(self, point_x, point_y, stage, picker: ColorPicker):
         # we need to reincorporate stage here
         # Stage = ANALYSIS for checking density
-        # Stage = SET for setting reference base density
+        # Stage = IMAGE for setting reference base density
         value = average_sample_point(self.density_analysis,
                                      int(point_x / self.resize_scale),
                                      int(point_y / self.resize_scale),
