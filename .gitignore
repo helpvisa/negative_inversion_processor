@@ -14,3 +14,8 @@ __pycache__/
 *.nef
 *.NEF
 *.nip.json
+
+# build files
+*.spec
+build/
+dist/

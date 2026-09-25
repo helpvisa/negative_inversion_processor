@@ -343,16 +343,16 @@ class ProcessingPipeline(QObject):
             working_image = load_raw_image(image_to_save).astype(np.float32) / 65535.0
             current_height, current_width, _ = working_image.shape
             ep = EditParams()
-            if image_to_save in PHOTO_INDEX:
-                ref = PHOTO_INDEX[image_to_save]
-                if "edit_params" in ref:
-                    print(f"Loading edit_params from memory for {image_to_save}.",
-                          file=sys.stderr)
-                    ep = ref['edit_params']
-                else:
-                    print(f"Loading edit_params from sidecar for {image_to_save}.",
-                          file=sys.stderr)
-                    ep = load_params_from_sidecar(image_to_save)
+            # if image_to_save in PHOTO_INDEX:
+                # ref = PHOTO_INDEX[image_to_save]
+                # if "edit_params" in ref:
+                #     print(f"Loading edit_params from memory for {image_to_save}.",
+                #           file=sys.stderr)
+                #     ep = ref['edit_params']
+                # else:
+                #     print(f"Loading edit_params from sidecar for {image_to_save}.",
+                #           file=sys.stderr)
+            ep = load_params_from_sidecar(image_to_save)
             # pre-inversion
             # apply ffc
             if ep.ffc_image:
