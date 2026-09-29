@@ -27,9 +27,9 @@ SAVE_FORMATS = [
     {'data': "ju8", 'display': "JPEG (8-bit integer)"}
 ]
 RAW_EXTENSIONS= [
-    "3fr", "ari", "arw", "bay", "bmq", "braw", "cap", "iiq", "eip", "cr2", 
-    "cr3", "crw", "dcs", "dcr", "drf", "k25", "kdc", "dng", "erf", "fff", 
-    "gpr", "mdc", "mef", "mos", "mrw", "nef", "nefx", "nrw", "orf", "pef",
+    "tif", "tiff", "3fr", "ari", "arw", "bay", "bmq", "braw", "cap", "iiq",
+    "eip", "cr2", "cr3", "crw", "dcs", "dcr", "drf", "k25", "kdc", "dng", "erf",
+    "fff", "gpr", "mdc", "mef", "mos", "mrw", "nef", "nefx", "nrw", "orf", "pef",
     "ptx", "pxn", "r3d", "raf", "raw", "rw2", "rwl", "sr2", "srf", "srw", "x3f"
 ]
 

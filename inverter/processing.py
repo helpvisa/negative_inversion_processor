@@ -22,16 +22,29 @@ from PIL import Image
 
 def load_raw_image(path):
     print(f"Loading image: {path}", file=sys.stderr)
-    with rawpy.imread(path) as raw:
-        # read in camera sensor data at 16bpp int with D65 white balance
-        d65_balance = raw.daylight_whitebalance
-        return raw.postprocess(use_camera_wb=False,
-                               user_wb=d65_balance,
-                               no_auto_bright=True,
-                               half_size=False,
-                               output_bps=16,
-                               gamma=(1.0, 1.0),
+    load = None
+    if path.endswith(('.tiff', '.tif')):
+        load = tifffile.imread(path, return_as='numpy')
+    else:
+        with rawpy.imread(path) as raw:
+            # read in camera sensor data at 16bpp int with D65 white balance
+            # d65_balance = raw.daylight_whitebalance
+            load = raw.postprocess(demosaic_algorithm=rawpy.DemosaicAlgorithm.AAHD,
+                                   use_camera_wb=True,
+                                   # user_wb=d65_balance,
+                                   no_auto_bright=True,
+                                   half_size=False,
+                                   output_bps=16,
+                                   gamma=(1.0, 1.0),
                                output_color=rawpy.ColorSpace.Rec2020)
+    # make sure the image returned is always within the range 0.0 <-> 1.0
+    if load.dtype == 'uint8':
+        load = load.astype('float32') / 255.0
+    elif load.dtype == 'uint16':
+        load = load.astype('float32') / 65535.0
+    else:
+        load = load.astype('float32') / load.max()
+    return load
 
 
 def save_image(image_data, output_path, tiff_format='f16', icc_profile=None):

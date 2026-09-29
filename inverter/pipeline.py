@@ -340,7 +340,7 @@ class ProcessingPipeline(QObject):
         print(f"Writing {image_to_save} to {output_path}...", file=sys.stderr)
 
         def process_and_save():
-            working_image = load_raw_image(image_to_save).astype(np.float32) / 65535.0
+            working_image = load_raw_image(image_to_save).astype(np.float32)
             current_height, current_width, _ = working_image.shape
             ep = EditParams()
             # if image_to_save in PHOTO_INDEX:
@@ -356,7 +356,7 @@ class ProcessingPipeline(QObject):
             # pre-inversion
             # apply ffc
             if ep.ffc_image:
-                loaded_ffc_raw = load_raw_image(ep.ffc_image).astype(np.float32) / 65535.0
+                loaded_ffc_raw = load_raw_image(ep.ffc_image).astype(np.float32)
                 working_image = apply_ffc(working_image, loaded_ffc_raw)
             # apply crop inset
             if ep.crop_inset < 1.0:
@@ -478,7 +478,7 @@ class ProcessingPipeline(QObject):
         if image_path:
             # the function to be executed within a separate thread
             def init_func():
-                raw = load_raw_image(image_path).astype(np.float32) / 65535.0
+                raw = load_raw_image(image_path).astype(np.float32)
                 self.currently_loaded_filename = image_path
                 if image_path not in PHOTO_INDEX:
                     PHOTO_INDEX[image_path] = {}
@@ -515,10 +515,11 @@ class ProcessingPipeline(QObject):
                 self.photoIndexUpdated.emit()
                 self.process_image(self.edit_params, force_refresh=True)
 
+            # dummy function; raise message in UI
             def error_func(e):
                 exctype, value, error = e
                 # tell user there's an issue
-                QMessageBox.critical(self, "Error processing image!", error)
+                self.messageRaised.emit(f"Error processing image!")
 
             # instantiate and run a thread
             # should split this out into its own function, surely
@@ -535,7 +536,7 @@ class ProcessingPipeline(QObject):
         if image_path:
             def init_func():
                 self.messageRaised.emit(f"Loading FFC image from {image_path}...")
-                image_data = load_raw_image(image_path).astype(np.float32) / 65535.0
+                image_data = load_raw_image(image_path).astype(np.float32)
                 self.ffc_image = image_data
                 self.ffc_image_small = ndimage.zoom(image_data,
                                                     (self.preview_scale,
@@ -545,8 +546,7 @@ class ProcessingPipeline(QObject):
 
             def error_func(e):
                 exctype, value, error = e
-                QMessageBox.critical(self, "Error processing FFC image!", error)
-                self.messageRaised.emit("Error processing FFC image! Aborting.")
+                self.messageRaised.emit(f"Error processing FFC image!")
 
             thread = self.threadpool.instantiate_thread(init_func)
             self.threadpool.active_threads[thread.thread_id] = thread

@@ -14,6 +14,7 @@
 # Negative Inversion Processor. If not, see <https://www.gnu.org/licenses/>. 
 
 import sys
+import time
 from pathlib import Path
 import numpy as np
 from PySide6.QtCore import Qt, Slot
@@ -44,8 +45,7 @@ PIPELINE: ProcessingPipeline = ProcessingPipeline()
 # derive from QWidget to create a custom updateable image class
 class PrimaryImageView(QWidget):
     def __init__(self, parent=None):
-        global PIPELINE
-        super(PrimaryImageView, self).__init__(parent)
+        super().__init__(parent)
         self.setMinimumSize(300, 200)
         PIPELINE.previewUpdated.connect(self.update_image)
 
@@ -66,8 +66,6 @@ class PrimaryImageView(QWidget):
         Modify numpy pixel data array and update the GUI to display the new
         image
         """
-        global PIPELINE
-
         def process():
             preview_image = PIPELINE.final_preview.copy()
             if preview_image.ndim < 3:
@@ -253,7 +251,6 @@ class ToolPanel(QWidget):
 
 class EditingDisplay(QWidget):
     def __init__(self, parent=None):
-        global PIPELINE
         super().__init__(parent)
         # internal tracking vars
         self.edit_params = EditParams()
@@ -263,6 +260,7 @@ class EditingDisplay(QWidget):
         self.performing_batch_export = False
         self.images_to_export = 0
         self.images_exported = 0
+        self.current_active_export_threads = 0
 
         # controls
         # demo controls
@@ -381,7 +379,6 @@ class EditingDisplay(QWidget):
                 tool.valueChanged.connect(self.update_edit_params)
 
     def update_rotation(self, direction):
-        global PIPELINE
         ep = self.edit_params
         ep.rotation = ep.rotation + direction
         if PIPELINE:
@@ -394,7 +391,6 @@ class EditingDisplay(QWidget):
         tp.blue_tune_slider.setValue(color[1] - color[2])
 
     def estimate_ratios(self, color):
-        global PIPELINE
         tp = self.tool_panel
         if PIPELINE.min_percentile is not None and \
            PIPELINE.min_percentile.any() and \
@@ -412,7 +408,7 @@ class EditingDisplay(QWidget):
         self.push_message("Image parameters copied to clipboard.")
 
     def paste_parameters(self):
-        global CLIPBOARD, PIPELINE
+        global CLIPBOARD
         if CLIPBOARD and PIPELINE:
             self.push_message("Image parameters pasted from clipboard.")
             new_edit_params = CLIPBOARD.copy()
@@ -420,8 +416,6 @@ class EditingDisplay(QWidget):
             self.set_edit_params_from_pipeline()
 
     def paste_parameters_to_entire_index(self):
-        global CLIPBOARD
-
         # first make sure user understands what they're doing
         reply = QMessageBox.question(self,
                                      "WARNING",
@@ -443,7 +437,6 @@ class EditingDisplay(QWidget):
                 update_sidecar(entry)
 
     def update_edit_params(self):
-        global PIPELINE, LOADED_RAW_PATH
         ep = self.edit_params
         tp = self.tool_panel
         ep.ffc_image = tp.ffc_label.text()
@@ -511,7 +504,6 @@ class EditingDisplay(QWidget):
         self.trigger_raw_load(raw_text)
 
     def open_ffc_selection_dialog(self):
-        global PIPELINE
         filter_string = "Camera RAW ("
         filter_string += " ".join(f"*.{e}" for e in RAW_EXTENSIONS)
         filter_string += ");; All Files (*)"
@@ -526,7 +518,6 @@ class EditingDisplay(QWidget):
 
 
     def open_load_dialog(self):
-        global PIPELINE, LOADED_RAW_PATH
         filter_string = "Camera RAW ("
         filter_string += " ".join(f"*.{e}" for e in RAW_EXTENSIONS)
         filter_string += ");; All Files (*)"
@@ -558,7 +549,6 @@ class EditingDisplay(QWidget):
         self.update_list_view()
 
     def open_save_dialog(self):
-        global PIPELINE, LOADED_RAW_PATH
         current_format = self.format_combobox.currentData()
         current_profile = self.profile_picker.currentData()
         default_filter = "TIFF Files (*.tiff *.tif)"
@@ -578,12 +568,19 @@ class EditingDisplay(QWidget):
                                       icc_profile=current_profile)
 
     def open_batch_export_dialog(self):
-        global PIPELINE
+        # The general approach here:
+        # We spin up a new thread that sits and waits until it finds a
+        # 'clear' spot to kick off a new export; we cap things at 4
+        # concurrent threads to avoid memory / process overloading issues which
+        # could trigger an OoM killer in some cases
+        # leverage 'time' to avoid cycle-wasting busy wait
         current_format = self.format_combobox.currentData()
         current_profile = self.profile_picker.currentData()
         selected_path = QFileDialog.getExistingDirectory()
-        if selected_path:
+
+        def push_exports():
             self.push_message("Initiating batch export!")
+            batch_objs = []
             folder_path = Path(selected_path)
             images_to_export = 0
             for entry in PHOTO_INDEX:
@@ -593,22 +590,41 @@ class EditingDisplay(QWidget):
                 if current_format == "ju8":
                     new_suffix = ".jpg"
                 final_path = folder_path / f"{entry_path.stem}{new_suffix}"
-                PIPELINE.save_final_image(image_to_save=entry,
-                                          output_path=final_path,
-                                          image_format=current_format,
-                                          icc_profile=current_profile)
+                batch_export_path = {
+                    "entry_name": entry,
+                    "final_path": final_path
+                }
+                batch_objs.append(batch_export_path)
             self.images_to_export = images_to_export
             self.performing_batch_export = True
+            current_idx = 0
+            while self.images_exported < self.images_to_export and \
+                  current_idx < len(batch_objs):
+                if self.current_active_export_threads < 4:
+                    self.current_active_export_threads += 1
+                    entry = batch_objs[current_idx]
+                    PIPELINE.save_final_image(image_to_save=entry['entry_name'],
+                                              output_path=entry['final_path'],
+                                              image_format=current_format,
+                                              icc_profile=current_profile)
+                    current_idx += 1
+            self.push_message("Pushed all images to render queue.")
+
+        if selected_path:
+            thread = PIPELINE.threadpool.instantiate_thread(push_exports)
+            PIPELINE.threadpool.active_threads[thread.thread_id] = thread
+            thread.signals.finished.connect(PIPELINE.threadpool.remove_thread)
+            PIPELINE.threadpool.start(thread)
 
     def update_batch_export_status(self):
         if self.performing_batch_export:
             self.images_exported += 1
+            self.current_active_export_threads -= 1
             self.push_message(f"Exported {self.images_exported} of "
                               f"{self.images_to_export}.")
             if self.images_exported >= self.images_to_export:
                 self.performing_batch_export = False
                 self.push_message("Finished exporting all images!")
-            
 
     def update_list_view(self):
         self.file_list.clear()
@@ -625,7 +641,18 @@ class EditingDisplay(QWidget):
         if message:
             self.message_queue.append(message)
         length = len(self.message_queue)
-        if length > 2:
+        if length > 4:
+            self.statusbar.setText(f"{self.message_queue[length - 5]}\n"
+                                   f"{self.message_queue[length - 4]}\n"
+                                   f"{self.message_queue[length - 3]}\n"
+                                   f"{self.message_queue[length - 2]}\n"
+                                   f"{self.message_queue[length - 1]}")
+        elif length > 3:
+            self.statusbar.setText(f"{self.message_queue[length - 4]}\n"
+                                   f"{self.message_queue[length - 3]}\n"
+                                   f"{self.message_queue[length - 2]}\n"
+                                   f"{self.message_queue[length - 1]}")
+        elif length > 2:
             self.statusbar.setText(f"{self.message_queue[length - 3]}\n"
                                    f"{self.message_queue[length - 2]}\n"
                                    f"{self.message_queue[length - 1]}")
@@ -657,10 +684,10 @@ if __name__ == "__main__":
         app.setStyleSheet(_styles)
     # set a global palette (should do this in stylesheet? enh)
     palette = QPalette(QColor(4,   4,   4  ),  # windowText
-                       QColor(128, 128, 128),  # window
+                       QColor(119, 119, 119),  # window
                        QColor(222, 222, 222),  # light
                        QColor(8,   8,   8  ),  # dark
-                       QColor(128, 128, 128),  # mid
+                       QColor(119, 119, 119),  # mid
                        QColor(4,   4,   4  ),  # text
                        QColor(192, 192, 192))  # base
     app.setPalette(palette)

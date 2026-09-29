@@ -177,10 +177,10 @@ def main():
         exit(1)
 
     # load negative
-    source_image = load_raw_image(args.image_path).astype(np.float32) / 65535.0
+    source_image = load_raw_image(args.image_path).astype(np.float32)
     # apply flat-field correction
     if args.ffc:
-        ffc_image = load_raw_image(args.ffc).astype(np.float32) / 65535.0
+        ffc_image = load_raw_image(args.ffc).astype(np.float32)
         source_image = apply_ffc(source_image, ffc_image, args.ffc_strength)
     adjustments = []
     if args.preset:
