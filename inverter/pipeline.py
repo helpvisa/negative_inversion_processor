@@ -478,7 +478,8 @@ class ProcessingPipeline(QObject):
         if image_path:
             # the function to be executed within a separate thread
             def init_func():
-                raw = load_raw_image(image_path).astype(np.float32)
+                raw = load_raw_image(image_path,
+                                     fast_mode=True).astype(np.float32)
                 self.currently_loaded_filename = image_path
                 if image_path not in PHOTO_INDEX:
                     PHOTO_INDEX[image_path] = {}
@@ -536,7 +537,8 @@ class ProcessingPipeline(QObject):
         if image_path:
             def init_func():
                 self.messageRaised.emit(f"Loading FFC image from {image_path}...")
-                image_data = load_raw_image(image_path).astype(np.float32)
+                image_data = load_raw_image(image_path,
+                                            fast_mode=True).astype(np.float32)
                 self.ffc_image = image_data
                 self.ffc_image_small = ndimage.zoom(image_data,
                                                     (self.preview_scale,

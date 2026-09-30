@@ -20,22 +20,26 @@ import numpy as np
 from PIL import Image
 
 
-def load_raw_image(path):
+def load_raw_image(path, fast_mode=False):
     print(f"Loading image: {path}", file=sys.stderr)
     load = None
     if path.endswith(('.tiff', '.tif')):
         load = tifffile.imread(path, return_as='numpy')
     else:
         with rawpy.imread(path) as raw:
-            # read in camera sensor data at 16bpp int with D65 white balance
-            # d65_balance = raw.daylight_whitebalance
-            load = raw.postprocess(use_camera_wb=True,
+            demosaic_algo = rawpy.DemosaicAlgorithm.AHD
+            half_size = False
+            if fast_mode:
+                demosaic_algo = rawpy.DemosaicAlgorithm.LINEAR
+                half_size = True
+            load = raw.postprocess(demosaic_algorithm=demosaic_algo,
+                                   use_camera_wb=True,
                                    # user_wb=d65_balance,
                                    no_auto_bright=True,
-                                   half_size=False,
+                                   half_size=half_size,
                                    output_bps=16,
                                    gamma=(1.0, 1.0),
-                               output_color=rawpy.ColorSpace.Rec2020)
+                                   output_color=rawpy.ColorSpace.Rec2020)
     # make sure the image returned is always within the range 0.0 <-> 1.0
     if load.dtype == 'uint8':
         load = load.astype('float32') / 255.0
