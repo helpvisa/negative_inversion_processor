@@ -17,19 +17,21 @@ import sys
 import rawpy
 import tifffile
 import numpy as np
+from pathlib import Path
 from PIL import Image
 from global_vars import RAW_EXTENSIONS
 
 
 def load_raw_image(path, fast_mode=False):
     print(f"Loading image: {path}", file=sys.stderr)
+    path_obj = Path(path)
     load = None
-    if path.endswith(('.tiff', '.tif')):
+    if path_obj.suffix.lower()[1:] in ['tiff', 'tif']:
         load = tifffile.imread(path, return_as='numpy')
         # discard transparency
         if load.shape[-1] == 4 or load.size == 6553600:
             load = load[..., :3]
-    elif path.endswith(tuple(RAW_EXTENSIONS)):
+    elif path_obj.suffix.lower()[1:] in RAW_EXTENSIONS:
         with rawpy.imread(path) as raw:
             demosaic_algo = rawpy.DemosaicAlgorithm.AHD
             half_size = False

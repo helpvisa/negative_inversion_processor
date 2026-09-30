@@ -15,8 +15,8 @@
 
 import sys
 import time
-from pathlib import Path
 import numpy as np
+from pathlib import Path
 from PySide6.QtCore import Qt, Slot
 from PySide6.QtGui import QImage, QPixmap, QPalette, QColor
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget,
@@ -132,11 +132,24 @@ class ToolPanel(QWidget):
         self.pre_inv_rotate_right = QPushButton("Rotate Right")
         self.pre_inv_orientation_layout.addWidget(self.pre_inv_rotate_left)
         self.pre_inv_orientation_layout.addWidget(self.pre_inv_rotate_right)
-        self.pre_inv_wb_picker = ColorPicker("Dmin - Base Color", Stage.PRE_INV)
+        self.pre_inv_wb_red = LabeledSlider("Base Red",
+                                            0.0, 2.0, 1.0, 1000,
+                                            "#ffeeee")
+        self.pre_inv_wb_green = LabeledSlider("Base Green",
+                                              0.0, 2.0, 1.0, 1000,
+                                              "#eeffee")
+        self.pre_inv_wb_blue = LabeledSlider("Base Blue",
+                                             0.0, 2.0, 1.0, 1000,
+                                             "#eeeeff")
+        self.pre_inv_wb_picker = ColorPicker("Dmin - Base Color", Stage.PRE_INV,
+                                             hide_value=True)
         pre_inversion_layout.addLayout(self.ffc_layout)
         pre_inversion_layout.addWidget(self.crop_inset_slider)
         pre_inversion_layout.addLayout(self.crop_shift_layout)
         pre_inversion_layout.addLayout(self.pre_inv_orientation_layout)
+        pre_inversion_layout.addWidget(self.pre_inv_wb_red)
+        pre_inversion_layout.addWidget(self.pre_inv_wb_green)
+        pre_inversion_layout.addWidget(self.pre_inv_wb_blue)
         pre_inversion_layout.addWidget(self.pre_inv_wb_picker)
         pre_inversion_groupbox.setLayout(pre_inversion_layout)
         self.tools.extend([self.crop_inset_slider,
@@ -144,6 +157,9 @@ class ToolPanel(QWidget):
                            self.crop_shift_v_slider,
                            self.pre_inv_rotate_left,
                            self.pre_inv_rotate_right,
+                           self.pre_inv_wb_red,
+                           self.pre_inv_wb_green,
+                           self.pre_inv_wb_blue,
                            self.pre_inv_wb_picker])
         # --- inversion tools layout
         inversion_groupbox = QGroupBox("Inversion")
@@ -157,8 +173,6 @@ class ToolPanel(QWidget):
         checkbox_layout.addWidget(self.bw_checkbox)
         self.pivot_slider = LabeledSlider("Pivot",
                                           0.0, 2.0, 0.745, 300)
-        # self.pivot_picker = ColorPicker("Pick Pivot from Film Base", Stage.RATIO,
-        #                                 hide_value=True)
         self.red_ratio_slider = LabeledSlider("Red Ratio",
                                               0.0, 3.0, 1.36, 300,
                                               "#ffcccc")
