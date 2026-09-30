@@ -29,8 +29,7 @@ def load_raw_image(path):
         with rawpy.imread(path) as raw:
             # read in camera sensor data at 16bpp int with D65 white balance
             # d65_balance = raw.daylight_whitebalance
-            load = raw.postprocess(demosaic_algorithm=rawpy.DemosaicAlgorithm.AAHD,
-                                   use_camera_wb=True,
+            load = raw.postprocess(use_camera_wb=True,
                                    # user_wb=d65_balance,
                                    no_auto_bright=True,
                                    half_size=False,
