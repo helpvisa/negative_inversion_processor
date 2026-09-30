@@ -530,23 +530,24 @@ class EditingDisplay(QWidget):
 
     def open_load_folder_dialog(self):
         selected_path = QFileDialog.getExistingDirectory()
-        folder_path = Path(selected_path)
-        # reset the photo index (include only current folder)
-        # this is why I called them "evil mutable global variables" >:^) hehe
-        PHOTO_INDEX.clear()
-        # [1:] required to strip period at start of f.suffix.lower()
-        files = [f for f in folder_path.iterdir() if \
-                 f.is_file() and f.suffix.lower()[1:] in RAW_EXTENSIONS]
-        print(files, file=sys.stderr)
-        for f in files:
-            name = str(f)
-            # load each file into the PHOTO_INDEX
-            PHOTO_INDEX[name] = {}
-            if 'edit_params' not in PHOTO_INDEX[name]:
-                print(f"Loading edit_params from sidecar for {name}.",
-                      file=sys.stderr)
-                PHOTO_INDEX[name]['edit_params'] = load_params_from_sidecar(name)
-        self.update_list_view()
+        if selected_path:
+            folder_path = Path(selected_path)
+            # reset the photo index (include only current folder)
+            # this is why I called them "evil mutable global variables" >:^) hehe
+            PHOTO_INDEX.clear()
+            # [1:] required to strip period at start of f.suffix.lower()
+            files = [f for f in folder_path.iterdir() if \
+                     f.is_file() and f.suffix.lower()[1:] in RAW_EXTENSIONS]
+            print(files, file=sys.stderr)
+            for f in files:
+                name = str(f)
+                # load each file into the PHOTO_INDEX
+                PHOTO_INDEX[name] = {}
+                if 'edit_params' not in PHOTO_INDEX[name]:
+                    print(f"Loading edit_params from sidecar for {name}.",
+                          file=sys.stderr)
+                    PHOTO_INDEX[name]['edit_params'] = load_params_from_sidecar(name)
+            self.update_list_view()
 
     def open_save_dialog(self):
         current_format = self.format_combobox.currentData()
@@ -624,6 +625,8 @@ class EditingDisplay(QWidget):
                               f"{self.images_to_export}.")
             if self.images_exported >= self.images_to_export:
                 self.performing_batch_export = False
+                self.images_to_export = 0
+                self.images_exported = 0
                 self.push_message("Finished exporting all images!")
 
     def update_list_view(self):
