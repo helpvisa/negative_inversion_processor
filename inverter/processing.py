@@ -18,6 +18,7 @@ import rawpy
 import tifffile
 import numpy as np
 from PIL import Image
+from global_vars import RAW_EXTENSIONS
 
 
 def load_raw_image(path, fast_mode=False):
@@ -25,7 +26,10 @@ def load_raw_image(path, fast_mode=False):
     load = None
     if path.endswith(('.tiff', '.tif')):
         load = tifffile.imread(path, return_as='numpy')
-    else:
+        # discard transparency
+        if load.shape[-1] == 4 or load.size == 6553600:
+            load = load[..., :3]
+    elif path.endswith(tuple(RAW_EXTENSIONS)):
         with rawpy.imread(path) as raw:
             demosaic_algo = rawpy.DemosaicAlgorithm.AHD
             half_size = False
@@ -40,6 +44,9 @@ def load_raw_image(path, fast_mode=False):
                                    output_bps=16,
                                    gamma=(1.0, 1.0),
                                    output_color=rawpy.ColorSpace.Rec2020)
+    else:
+        # make sure images are loaded as numpy arrays
+        load = np.asarray(Image.open(path))
     # make sure any integer-based images operate within the 0.0 <-> 1.0 range
     # ==========================================================================
     # if loading a floating-point image, we can assume it is already operating

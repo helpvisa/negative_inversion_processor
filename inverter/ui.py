@@ -506,7 +506,7 @@ class EditingDisplay(QWidget):
     def open_ffc_selection_dialog(self):
         filter_string = "Camera RAW ("
         filter_string += " ".join(f"*.{e}" for e in RAW_EXTENSIONS)
-        filter_string += ");; All Files (*)"
+        filter_string += ");; All Files (jpeg, etc.) (*)"
         image_path, _ = QFileDialog.getOpenFileName(
             None,
             caption="Select RAW File",
@@ -520,7 +520,7 @@ class EditingDisplay(QWidget):
     def open_load_dialog(self):
         filter_string = "Camera RAW ("
         filter_string += " ".join(f"*.{e}" for e in RAW_EXTENSIONS)
-        filter_string += ");; All Files (*)"
+        filter_string += ");; All Files (jpeg, etc.) (*)"
         image_path, _ = QFileDialog.getOpenFileName(
             None,
             caption="Select RAW File",
