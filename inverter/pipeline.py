@@ -28,7 +28,6 @@ from pathlib import Path
 import numpy as np
 from scipy import ndimage
 from PySide6.QtCore import QObject, Signal, Slot
-from PySide6.QtWidgets import QMessageBox
 from deepdiff import DeepDiff
 from threads import WorkerThreadPool
 from edit_params import EditParams, Stage
@@ -483,13 +482,20 @@ class ProcessingPipeline(QObject):
                 self.currently_loaded_filename = image_path
                 if image_path not in PHOTO_INDEX:
                     PHOTO_INDEX[image_path] = {}
-                height, width, _ = raw.shape
+                # we may have < 3 dimensions (depending on how image was loaded)
+                # the *_ syntax lets us ignore any values we don't need
+                height, width, *_ = raw.shape
                 self.raw_width = width
                 self.raw_height = height
                 if width > height:
                     self.preview_scale = self.max_preview_size / width
                 else:
                     self.preview_scale = self.max_preview_size / height
+                # the image that we loaded *might* be grayscale (if tiff)
+                # BUT, all functions operate under the assumption of 3 channels
+                # stack one-channel images into three-channel images
+                if raw.ndim < 3:
+                    raw = np.stack((raw, raw, raw), axis=-1)
                 # order == filter quality (0 - 5, 0 is fastest)
                 scaled_raw = ndimage.zoom(raw, (self.preview_scale,
                                                 self.preview_scale, 1), order=1)

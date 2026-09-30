@@ -40,13 +40,18 @@ def load_raw_image(path, fast_mode=False):
                                    output_bps=16,
                                    gamma=(1.0, 1.0),
                                    output_color=rawpy.ColorSpace.Rec2020)
-    # make sure the image returned is always within the range 0.0 <-> 1.0
+    # make sure any integer-based images operate within the 0.0 <-> 1.0 range
+    # ==========================================================================
+    # if loading a floating-point image, we can assume it is already operating
+    # in the 0.0 <-> 1.0 range in general, though some values may be above 1
+    # attempt to normalize floating point images can cause ridiculous brightness
+    # shifts, so best to refrain from additional processing in these instances
+    # and accept that images with values outside the 0.0 <-> 1.0 range
+    # may suffer from clipping artifacts when inverted / processed
     if load.dtype == 'uint8':
         load = load.astype('float32') / 255.0
     elif load.dtype == 'uint16':
         load = load.astype('float32') / 65535.0
-    else:
-        load = load.astype('float32') / load.max()
     return load
 
 
