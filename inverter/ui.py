@@ -132,24 +132,26 @@ class ToolPanel(QWidget):
         self.pre_inv_rotate_right = QPushButton("Rotate Right")
         self.pre_inv_orientation_layout.addWidget(self.pre_inv_rotate_left)
         self.pre_inv_orientation_layout.addWidget(self.pre_inv_rotate_right)
-        self.pre_inv_wb_red = LabeledSlider("Base Red",
+        self.base_color_layout = QHBoxLayout()
+        self.pre_inv_wb_red = LabeledSlider("Base R",
                                             0.0, 2.0, 1.0, 1000,
-                                            "#ffeeee")
-        self.pre_inv_wb_green = LabeledSlider("Base Green",
+                                            "#ff8888")
+        self.pre_inv_wb_green = LabeledSlider("Base G",
                                               0.0, 2.0, 1.0, 1000,
-                                              "#eeffee")
-        self.pre_inv_wb_blue = LabeledSlider("Base Blue",
+                                              "#88ff88")
+        self.pre_inv_wb_blue = LabeledSlider("Base B",
                                              0.0, 2.0, 1.0, 1000,
-                                             "#eeeeff")
+                                             "#8888ff")
+        self.base_color_layout.addWidget(self.pre_inv_wb_red)
+        self.base_color_layout.addWidget(self.pre_inv_wb_green)
+        self.base_color_layout.addWidget(self.pre_inv_wb_blue)
         self.pre_inv_wb_picker = ColorPicker("Dmin - Base Color", Stage.PRE_INV,
                                              hide_value=True)
         pre_inversion_layout.addLayout(self.ffc_layout)
         pre_inversion_layout.addWidget(self.crop_inset_slider)
         pre_inversion_layout.addLayout(self.crop_shift_layout)
         pre_inversion_layout.addLayout(self.pre_inv_orientation_layout)
-        pre_inversion_layout.addWidget(self.pre_inv_wb_red)
-        pre_inversion_layout.addWidget(self.pre_inv_wb_green)
-        pre_inversion_layout.addWidget(self.pre_inv_wb_blue)
+        pre_inversion_layout.addLayout(self.base_color_layout)
         pre_inversion_layout.addWidget(self.pre_inv_wb_picker)
         pre_inversion_groupbox.setLayout(pre_inversion_layout)
         self.tools.extend([self.crop_inset_slider,
@@ -383,7 +385,8 @@ class EditingDisplay(QWidget):
         # allow view to send values back
         ip.view.pointPicked.connect(tp.pre_inv_wb_picker.finish_pick)
         ip.view.pointPicked.connect(tp.grading_wb_picker.finish_pick)
-        # update grading panel if grading wb picked
+        # update base panel / grading panel if grading wb picked
+        tp.pre_inv_wb_picker.colorChanged.connect(self.update_base_panel)
         tp.grading_wb_picker.colorChanged.connect(self.update_grading_panel)
         # update_edit_params on change of any subvalue of ToolPanel
         for tool in tp.tools:
@@ -397,6 +400,12 @@ class EditingDisplay(QWidget):
         ep.rotation = ep.rotation + direction
         if PIPELINE:
             PIPELINE.process_image(ep.copy())
+
+    def update_base_panel(self, color):
+        tp = self.tool_panel
+        tp.pre_inv_wb_red.setValue(color[0])
+        tp.pre_inv_wb_green.setValue(color[1])
+        tp.pre_inv_wb_blue.setValue(color[2])
 
     def update_grading_panel(self, color):
         tp = self.tool_panel
@@ -460,7 +469,11 @@ class EditingDisplay(QWidget):
         ep.skip_inversion = tp.skip_inversion_checkbox.isChecked()
         ep.bw_mode = tp.bw_checkbox.isChecked()
         ep.base_color_xy = tp.pre_inv_wb_picker.value()
-        ep.base_color = tp.pre_inv_wb_picker.colorValue()
+        # base_color from sliders; maintains compatibility with old sidecars
+        new_base_color = np.array([tp.pre_inv_wb_red.value(),
+                                   tp.pre_inv_wb_green.value(),
+                                   tp.pre_inv_wb_blue.value()])
+        ep.base_color = new_base_color
         ep.pivot = tp.pivot_slider.value()
         ep.red_ratio = tp.red_ratio_slider.value()
         ep.blue_ratio = tp.blue_ratio_slider.value()
@@ -489,6 +502,9 @@ class EditingDisplay(QWidget):
         tp.crop_shift_v_slider.setValue(ep.crop_shift_v)
         tp.skip_inversion_checkbox.setChecked(ep.skip_inversion)
         tp.bw_checkbox.setChecked(ep.bw_mode)
+        tp.pre_inv_wb_red.setValue(ep.base_color[0])
+        tp.pre_inv_wb_green.setValue(ep.base_color[1])
+        tp.pre_inv_wb_blue.setValue(ep.base_color[2])
         tp.pre_inv_wb_picker.update_color(ep.base_color)
         tp.pivot_slider.setValue(ep.pivot)
         tp.red_ratio_slider.setValue(ep.red_ratio)

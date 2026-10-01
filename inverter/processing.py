@@ -26,6 +26,7 @@ def load_raw_image(path, fast_mode=False):
     print(f"Loading image: {path}", file=sys.stderr)
     path_obj = Path(path)
     load = None
+    # see ui.py:552 for full explanation of [1:]
     if path_obj.suffix.lower()[1:] in ['tiff', 'tif']:
         load = tifffile.imread(path, return_as='numpy')
         # discard transparency
