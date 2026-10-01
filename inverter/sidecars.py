@@ -68,6 +68,12 @@ def load_params_from_sidecar(filepath):
         # load sidecar
         load_path = filepath + ".nip.json"
         ep = EditParams()
+        # approach for adding new values to sidecars without breaking things:
+        #   - iterate through all keys in sidecar
+        #   - match by name, apply logic selectively
+        #   - any missing values inherit the default
+        # will require rewrite of below code; do this before adding in new
+        # tonemapping options / controls
         try:
             with open(load_path, 'r') as f:
                 sidecar = json.loads(f.read())
