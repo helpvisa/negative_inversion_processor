@@ -24,8 +24,9 @@
 #         - final
 
 import sys
-from pathlib import Path
+import math
 import numpy as np
+from pathlib import Path
 from scipy import ndimage
 from PySide6.QtCore import QObject, Signal, Slot
 from deepdiff import DeepDiff
@@ -311,13 +312,15 @@ class ProcessingPipeline(QObject):
 
         def current():
             # apply final makeup gain
+            # we first convert exposure from stops -> gain
+            exposure_gain = math.pow(2, ep.final_exposure)
             if not ep.bw_mode:
-                exposure_tuple = (ep.final_exposure,
-                                  ep.final_exposure,
-                                  ep.final_exposure)
+                exposure_tuple = (exposure_gain,
+                                  exposure_gain,
+                                  exposure_gain)
                 self.final_preview = apply_gain(self.grade_inter, exposure_tuple)
             else:
-                self.final_preview = self.grade_inter * ep.final_exposure
+                self.final_preview = self.grade_inter * exposure_gain
             if ep.tonemap:
                 self.final_preview = aces_tonemap(self.final_preview, toe=ep.toe)
 
@@ -429,13 +432,15 @@ class ProcessingPipeline(QObject):
             if ep.bw_mode:
                 working_image = convert_to_grayscale_from_g(working_image)
             # tonemap
+            # exposure gain from stops
+            exposure_gain = math.pow(2, ep.final_exposure)
             if not ep.bw_mode:
-                exposure_tuple = (ep.final_exposure,
-                                  ep.final_exposure,
-                                  ep.final_exposure)
+                exposure_tuple = (exposure_gain,
+                                  exposure_gain,
+                                  exposure_gain)
                 working_image = apply_gain(working_image, exposure_tuple)
             else:
-                working_image *= ep.final_exposure
+                working_image *= exposure_gain
             if ep.tonemap:
                 working_image = aces_tonemap(working_image, toe=ep.toe)
             # assign correct ICC profile

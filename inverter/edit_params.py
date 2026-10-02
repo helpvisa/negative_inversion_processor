@@ -63,7 +63,8 @@ class EditParams:
     wb_blue: float = 0.0
 
     # --- brightness, look, and tonemapping
-    final_exposure: float = 1.0
+    # exposure is measured in stops, so a 0 stop adjustment is default
+    final_exposure: float = 0.0
     tonemap: bool = False
     toe: float = 0.20
 

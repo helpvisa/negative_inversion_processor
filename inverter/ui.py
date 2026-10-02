@@ -245,14 +245,15 @@ class ToolPanel(QWidget):
         # --- tonemapping and final output
         tonemap_groupbox = QGroupBox("Tonemapping and Output")
         tonemap_layout = QVBoxLayout()
-        self.exposure_slider = LabeledSlider("Final Exposure",
-                                             0.0, 20.0, 1.0, 400)
+        self.exposure_slider = LabeledSlider("Exposure (Stops)",
+                                             -10.0, 10.0, 0.0, 400)
         self.tonemap_checkbox = QCheckBox("Apply Tonemapping")
         self.toe_slider = LabeledSlider("Toe",
                                         0.0, 1.0, 0.20, 400)
         tonemap_layout.addWidget(self.exposure_slider)
         tonemap_layout.addWidget(self.tonemap_checkbox)
-        tonemap_layout.addWidget(self.toe_slider)
+        # temporarily hide toe slider
+        # tonemap_layout.addWidget(self.toe_slider)
         tonemap_groupbox.setLayout(tonemap_layout)
         self.tools.extend([self.exposure_slider,
                            self.tonemap_checkbox,
