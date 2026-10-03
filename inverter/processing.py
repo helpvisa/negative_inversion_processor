@@ -225,14 +225,14 @@ def invert_to_density(image_data):
 
 
 def to_density(image_data):
-    return np.log10(np.clip(image_data, a_min=1e-3, a_max=1.0))
+    # we bring negative values into positive space without inversion by
+    # subtracting theoretical Dmax (log10(1e-3) == 3.0)
+    return 3.0 - np.log10(1 / np.clip(image_data, a_min=1e-3, a_max=1.0))
 
 
 def density_to_luminance(image_data, scale=0.01):
     """
     Map an image from "density space" into its final luminance values.
-
-    This often makes the film carrier look insane. Please ignore this.
     """
     return np.power(10, image_data) * scale
 

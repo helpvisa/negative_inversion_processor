@@ -278,38 +278,16 @@ class ProcessingPipeline(QObject):
             if not ep.bw_mode:
                 # gain
                 gain_tuple = (ep.red_gain, ep.green_gain, ep.blue_gain)
-                if ep.skip_inversion:
-                    self.grade_inter = apply_division(self.grade_inter,
-                                                      gain_tuple)
-                else:
-                    self.grade_inter = apply_gain(self.grade_inter, gain_tuple)
+                self.grade_inter = apply_gain(self.grade_inter, gain_tuple)
                 self.grade_gain_inter = self.grade_inter.copy()
                 # tune (addition)
                 add_tuple = (ep.wb_red, ep.wb_green, ep.wb_blue)
-                # if ep.skip_inversion:
-                    # add_tuple = tuple(val * -1 for val in add_tuple)
                 self.grade_inter = apply_addition(self.grade_inter, add_tuple)
+            # apply ASC CDL
+            self.grade_inter = np.pow(np.maximum(self.grade_inter * ep.slope + ep.offset, 0.0),
+                                      ep.power)
             # then convert to luminance
-            if not ep.skip_inversion:
-                # apply ASC CDL
-                self.grade_inter = np.pow(self.grade_inter * ep.slope + ep.offset,
-                                          ep.power)
-                self.grade_inter = density_to_luminance(self.grade_inter)
-            else:
-                # apply ASC CDL (inverted)
-                # goofy ass workaround: we are technically working with negative
-                # values when editing positive (slide) film, so we perform these
-                # adjustments on the negative of the negative values, then
-                # return the negative of the adjustment on the negative
-                # negatives in order to get positive values...
-                # oh, and we have to invert the CDL logic to make sure it's
-                # working in the "right direction"
-                # making sense yet?
-                # the whole logic here should probably be rethought but it works
-                self.grade_inter = -np.pow(-self.grade_inter / ep.slope - ep.offset,
-                                           ep.power)
-                self.grade_inter = density_to_luminance(self.grade_inter,
-                                                        scale=1.0)
+            self.grade_inter = density_to_luminance(self.grade_inter)
             if ep.bw_mode:
                 self.grade_inter = convert_to_grayscale_from_g(self.grade_inter)
 
@@ -360,15 +338,6 @@ class ProcessingPipeline(QObject):
             working_image = load_raw_image(image_to_save).astype(np.float32)
             current_height, current_width, _ = working_image.shape
             ep = EditParams()
-            # if image_to_save in PHOTO_INDEX:
-                # ref = PHOTO_INDEX[image_to_save]
-                # if "edit_params" in ref:
-                #     print(f"Loading edit_params from memory for {image_to_save}.",
-                #           file=sys.stderr)
-                #     ep = ref['edit_params']
-                # else:
-                #     print(f"Loading edit_params from sidecar for {image_to_save}.",
-                #           file=sys.stderr)
             ep = load_params_from_sidecar(image_to_save)
             # pre-inversion
             # apply ffc
@@ -432,21 +401,13 @@ class ProcessingPipeline(QObject):
             # grade
             if not ep.bw_mode:
                 gain_tuple = (ep.red_gain, ep.green_gain, ep.blue_gain)
-                if ep.skip_inversion:
-                    working_image = apply_division(working_image, gain_tuple)
-                else:
-                    working_image = apply_gain(working_image, gain_tuple)
+                working_image = apply_gain(working_image, gain_tuple)
                 add_tuple = (ep.wb_red, ep.wb_green, ep.wb_blue)
-                # if ep.skip_inversion:
-                    # add_tuple = tuple(val * -1 for val in add_tuple)
                 working_image = apply_addition(working_image, add_tuple)
             # apply ASC CDL
-            working_image = np.pow(working_image * ep.slope + ep.offset,
+            working_image = np.pow(np.maximum(working_image * ep.slope + ep.offset, 0.0),
                                    ep.power)
-            if not ep.skip_inversion:
-                working_image = density_to_luminance(working_image)
-            else:
-                working_image = density_to_luminance(working_image, scale=1.0)
+            working_image = density_to_luminance(working_image)
             if ep.bw_mode:
                 working_image = convert_to_grayscale_from_g(working_image)
             # tonemap
@@ -549,7 +510,7 @@ class ProcessingPipeline(QObject):
             def error_func(e):
                 exctype, value, error = e
                 # tell user there's an issue
-                self.messageRaised.emit(f"Error processing image!")
+                self.messageRaised.emit("Error processing image!")
 
             # instantiate and run a thread
             # should split this out into its own function, surely
@@ -577,7 +538,7 @@ class ProcessingPipeline(QObject):
 
             def error_func(e):
                 exctype, value, error = e
-                self.messageRaised.emit(f"Error processing FFC image!")
+                self.messageRaised.emit("Error processing FFC image!")
 
             thread = self.threadpool.instantiate_thread(init_func)
             self.threadpool.active_threads[thread.thread_id] = thread
