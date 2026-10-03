@@ -289,13 +289,25 @@ class ProcessingPipeline(QObject):
                 # if ep.skip_inversion:
                     # add_tuple = tuple(val * -1 for val in add_tuple)
                 self.grade_inter = apply_addition(self.grade_inter, add_tuple)
-            # apply ASC CDL
-            self.grade_inter = np.pow(self.grade_inter * ep.slope + ep.offset,
-                                      ep.power)
             # then convert to luminance
             if not ep.skip_inversion:
+                # apply ASC CDL
+                self.grade_inter = np.pow(self.grade_inter * ep.slope + ep.offset,
+                                          ep.power)
                 self.grade_inter = density_to_luminance(self.grade_inter)
             else:
+                # apply ASC CDL (inverted)
+                # goofy ass workaround: we are technically working with negative
+                # values when editing positive (slide) film, so we perform these
+                # adjustments on the negative of the negative values, then
+                # return the negative of the adjustment on the negative
+                # negatives in order to get positive values...
+                # oh, and we have to invert the CDL logic to make sure it's
+                # working in the "right direction"
+                # making sense yet?
+                # the whole logic here should probably be rethought but it works
+                self.grade_inter = -np.pow(-self.grade_inter / ep.slope - ep.offset,
+                                           ep.power)
                 self.grade_inter = density_to_luminance(self.grade_inter,
                                                         scale=1.0)
             if ep.bw_mode:
