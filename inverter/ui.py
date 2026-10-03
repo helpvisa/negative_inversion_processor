@@ -245,19 +245,31 @@ class ToolPanel(QWidget):
         # --- tonemapping and final output
         tonemap_groupbox = QGroupBox("Tonemapping and Output")
         tonemap_layout = QVBoxLayout()
+        cdl_layout = QHBoxLayout()
+        self.slope_slider = LabeledSlider("Slope",
+                                          0.5, 2.0, 1.0, 500,
+                                          "#ababab")
+        self.offset_slider = LabeledSlider("Offset",
+                                           -1.0, 1.0, 0.0, 500,
+                                           "#000000")
+        self.power_slider = LabeledSlider("Power",
+                                          0.2, 2.0, 1.0, 500,
+                                          "#efefef")
+        cdl_layout.addWidget(self.slope_slider)
+        cdl_layout.addWidget(self.offset_slider)
+        cdl_layout.addWidget(self.power_slider)
         self.exposure_slider = LabeledSlider("Exposure (Stops)",
                                              -10.0, 10.0, 0.0, 400)
         self.tonemap_checkbox = QCheckBox("Apply Tonemapping")
-        self.toe_slider = LabeledSlider("Toe",
-                                        0.0, 1.0, 0.20, 400)
+        tonemap_layout.addLayout(cdl_layout)
         tonemap_layout.addWidget(self.exposure_slider)
         tonemap_layout.addWidget(self.tonemap_checkbox)
-        # temporarily hide toe slider
-        # tonemap_layout.addWidget(self.toe_slider)
         tonemap_groupbox.setLayout(tonemap_layout)
-        self.tools.extend([self.exposure_slider,
-                           self.tonemap_checkbox,
-                           self.toe_slider])
+        self.tools.extend([self.slope_slider,
+                           self.offset_slider,
+                           self.power_slider,
+                           self.exposure_slider,
+                           self.tonemap_checkbox])
         # --- add all layouts
         self.layout.addWidget(pre_inversion_groupbox)
         self.layout.addWidget(inversion_groupbox)
@@ -489,7 +501,9 @@ class EditingDisplay(QWidget):
         ep.wb_blue = tp.blue_tune_slider.value()
         ep.final_exposure = tp.exposure_slider.value()
         ep.tonemap = tp.tonemap_checkbox.isChecked()
-        ep.toe = tp.toe_slider.value()
+        ep.slope = tp.slope_slider.value()
+        ep.offset = tp.offset_slider.value()
+        ep.power = tp.power_slider.value()
         if PIPELINE:
             PIPELINE.process_image(ep.copy())
 
@@ -503,9 +517,14 @@ class EditingDisplay(QWidget):
         tp.crop_shift_v_slider.setValue(ep.crop_shift_v)
         tp.skip_inversion_checkbox.setChecked(ep.skip_inversion)
         tp.bw_checkbox.setChecked(ep.bw_mode)
-        tp.pre_inv_wb_red.setValue(ep.base_color[0])
-        tp.pre_inv_wb_green.setValue(ep.base_color[1])
-        tp.pre_inv_wb_blue.setValue(ep.base_color[2])
+        if None is not ep.base_color:
+            tp.pre_inv_wb_red.setValue(ep.base_color[0])
+            tp.pre_inv_wb_green.setValue(ep.base_color[1])
+            tp.pre_inv_wb_blue.setValue(ep.base_color[2])
+        else:
+            tp.pre_inv_wb_red.setValue(1.0)
+            tp.pre_inv_wb_green.setValue(1.0)
+            tp.pre_inv_wb_blue.setValue(1.0)
         tp.pre_inv_wb_picker.update_color(ep.base_color)
         tp.pivot_slider.setValue(ep.pivot)
         tp.red_ratio_slider.setValue(ep.red_ratio)
@@ -520,8 +539,9 @@ class EditingDisplay(QWidget):
         tp.blue_tune_slider.setValue(ep.wb_blue)
         tp.exposure_slider.setValue(ep.final_exposure)
         tp.tonemap_checkbox.setChecked(ep.tonemap)
-        tp.toe_slider.setValue(ep.toe)
-
+        tp.slope_slider.setValue(ep.slope)
+        tp.offset_slider.setValue(ep.offset)
+        tp.power_slider.setValue(ep.power)
 
     def trigger_raw_load(self, image_path):
         global LOADED_RAW_PATH

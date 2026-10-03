@@ -52,7 +52,6 @@ def update_sidecar(filepath):
             "wb_blue": ep.wb_blue,
             "final_exposure": ep.final_exposure,
             "tonemap": ep.tonemap,
-            "toe": ep.toe
         }
         # construct destination path
         final_path = filepath + ".nip.json"
@@ -77,45 +76,37 @@ def load_params_from_sidecar(filepath):
         try:
             with open(load_path, 'r') as f:
                 sidecar = json.loads(f.read())
-                ep.ffc_image = sidecar['ffc_image']
-                ep.rotation = sidecar['rotation']
-                ep.crop_inset = sidecar['crop_inset']
-                ep.crop_shift_h = sidecar['crop_shift_h']
-                ep.crop_shift_v = sidecar['crop_shift_v']
-                ep.skip_inversion = sidecar['skip_inversion']
-                ep.bw_mode = sidecar['bw_mode']
-                bc_xy_list = sidecar['base_color_xy']
-                bc_xy_tuple = (bc_xy_list[0], bc_xy_list[1]) if bc_xy_list else None
-                ep.base_color_xy = bc_xy_tuple
-                bc_list = sidecar['base_color']
-                bc_tuple = np.array([bc_list[0], bc_list[1], bc_list[2]]) if bc_list else None
-                ep.base_color = bc_tuple
-                ep.pivot = sidecar['pivot']
-                ep.red_ratio = sidecar['red_ratio']
-                ep.blue_ratio = sidecar['blue_ratio']
-                ep.green_exponent = sidecar['green_exponent']
-                ep.red_gain = sidecar['red_gain']
-                ep.green_gain = sidecar['green_gain']
-                ep.blue_gain = sidecar['blue_gain']
-                wb_xy_list = sidecar['wb_xy']
-                wb_xy_tuple = (wb_xy_list[0], wb_xy_list[1]) if wb_xy_list else None
-                ep.wb_xy = wb_xy_tuple
-                wb_list = sidecar['wb_reference']
-                wb_tuple = np.array([wb_list[0], wb_list[1], wb_list[2]]) if wb_list else None
-                ep.wb_reference = wb_tuple
-                ep.wb_red = sidecar['wb_red']
-                ep.wb_green = sidecar['wb_green']
-                ep.wb_blue = sidecar['wb_blue']
-                ep.final_exposure = sidecar['final_exposure']
-                ep.tonemap = sidecar['tonemap']
-                ep.toe = sidecar['toe']
+                for key in sidecar:
+                    if key == 'base_color_xy':
+                        print(f"Setting value for {key}", file=sys.stderr)
+                        bc_xy_list = sidecar[key]
+                        bc_xy_tuple = (bc_xy_list[0], bc_xy_list[1]) if bc_xy_list else None
+                        ep.base_color_xy = bc_xy_tuple
+                    elif key == 'base_color':
+                        print(f"Setting value for {key}", file=sys.stderr)
+                        bc_list = sidecar['base_color']
+                        bc_tuple = np.array([bc_list[0], bc_list[1], bc_list[2]]) if bc_list else None
+                        ep.base_color = bc_tuple
+                    elif key == 'wb_xy':
+                        print(f"Setting value for {key}", file=sys.stderr)
+                        wb_xy_list = sidecar['wb_xy']
+                        wb_xy_tuple = (wb_xy_list[0], wb_xy_list[1]) if wb_xy_list else None
+                        ep.wb_xy = wb_xy_tuple
+                    elif key == 'wb_reference':
+                        print(f"Setting value for {key}", file=sys.stderr)
+                        wb_list = sidecar['wb_reference']
+                        wb_tuple = np.array([wb_list[0], wb_list[1], wb_list[2]]) if wb_list else None
+                        ep.wb_reference = wb_tuple
+                    else:
+                        print(f"Setting value for {key}", file=sys.stderr)
+                        setattr(ep, key, sidecar[key])
                 return ep
         except FileNotFoundError:
             print("No sidecar file found. Returning blank edit params.",
                   file=sys.stderr)
             return EditParams()
         except KeyError as e:
-            print(f"Sidecar is missing a key and may be for an old version of NIP: {e}",
+            print(f"Sidecar is missing a key and may be for another version of NIP: {e}",
                   file=sys.stderr)
             return EditParams()
     else:

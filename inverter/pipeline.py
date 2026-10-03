@@ -118,9 +118,9 @@ class ProcessingPipeline(QObject):
                                  'root.green_exponent', 'root.bw_mode']
                 grade_changes = ['root.red_gain', 'root.green_gain',
                                  'root.blue_gain', 'root.wb_red', 'root.wb_green',
-                                 'root.wb_blue']
-                tonemap_changes = ['root.final_exposure', 'root.tonemap',
-                                   'root.toe']
+                                 'root.wb_blue', 'root.slope', 'root.offset',
+                                 'root.power']
+                tonemap_changes = ['root.final_exposure', 'root.tonemap']
                 if 'root.ffc_image' in changes or 'root.ffc_image' in type_changes:
                     print("ffc_image changed!", file=sys.stderr)
                     if self.edit_params.ffc_image:
@@ -289,6 +289,9 @@ class ProcessingPipeline(QObject):
                 # if ep.skip_inversion:
                     # add_tuple = tuple(val * -1 for val in add_tuple)
                 self.grade_inter = apply_addition(self.grade_inter, add_tuple)
+            # apply ASC CDL
+            self.grade_inter = np.pow(self.grade_inter * ep.slope + ep.offset,
+                                      ep.power)
             # then convert to luminance
             if not ep.skip_inversion:
                 self.grade_inter = density_to_luminance(self.grade_inter)
@@ -322,7 +325,7 @@ class ProcessingPipeline(QObject):
             else:
                 self.final_preview = self.grade_inter * exposure_gain
             if ep.tonemap:
-                self.final_preview = aces_tonemap(self.final_preview, toe=ep.toe)
+                self.final_preview = aces_tonemap(self.final_preview)
 
         def proceed():
             self.previewUpdated.emit()
@@ -425,6 +428,9 @@ class ProcessingPipeline(QObject):
                 # if ep.skip_inversion:
                     # add_tuple = tuple(val * -1 for val in add_tuple)
                 working_image = apply_addition(working_image, add_tuple)
+            # apply ASC CDL
+            self.working_image = np.pow(self.working_image * ep.slope + ep.offset,
+                                        ep.power)
             if not ep.skip_inversion:
                 working_image = density_to_luminance(working_image)
             else:
@@ -442,7 +448,7 @@ class ProcessingPipeline(QObject):
             else:
                 working_image *= exposure_gain
             if ep.tonemap:
-                working_image = aces_tonemap(working_image, toe=ep.toe)
+                working_image = aces_tonemap(working_image)
             # assign correct ICC profile
             save_profile = None
             current_root = Path(__file__).resolve().parent

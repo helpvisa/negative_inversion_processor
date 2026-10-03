@@ -65,8 +65,12 @@ class EditParams:
     # --- brightness, look, and tonemapping
     # exposure is measured in stops, so a 0 stop adjustment is default
     final_exposure: float = 0.0
+    slope: float = 1.0
+    offset: float = 0.0
+    power: float = 1.0
+    
     tonemap: bool = False
-    toe: float = 0.20
+    
 
     def copy(self) -> "EditParams":
         """
