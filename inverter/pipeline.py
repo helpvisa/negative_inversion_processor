@@ -429,8 +429,8 @@ class ProcessingPipeline(QObject):
                     # add_tuple = tuple(val * -1 for val in add_tuple)
                 working_image = apply_addition(working_image, add_tuple)
             # apply ASC CDL
-            self.working_image = np.pow(self.working_image * ep.slope + ep.offset,
-                                        ep.power)
+            working_image = np.pow(working_image * ep.slope + ep.offset,
+                                   ep.power)
             if not ep.skip_inversion:
                 working_image = density_to_luminance(working_image)
             else:

@@ -50,6 +50,9 @@ def update_sidecar(filepath):
             "wb_red": ep.wb_red,
             "wb_green": ep.wb_green,
             "wb_blue": ep.wb_blue,
+            "slope": ep.slope,
+            "offset": ep.offset,
+            "power": ep.power,
             "final_exposure": ep.final_exposure,
             "tonemap": ep.tonemap,
         }
