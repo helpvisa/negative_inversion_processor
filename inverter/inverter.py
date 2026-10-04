@@ -21,7 +21,7 @@ from scipy import ndimage
 import parse_cli_arguments
 from presets import save_preset, load_preset
 from PIL import ImageCms
-from colour_management import (convert_to_sRGB, ocio_load_and_create_config,
+from colour_management import (linear_to_sRGB, ocio_load_and_create_config,
                                ocio_convert_colorspace, aces_tonemap)
 from processing import (load_raw_image, save_image,
                         invert_to_density, density_to_luminance,
@@ -228,7 +228,7 @@ def main():
                   "      but you have not provided an ICC profile to embed.\n"
                   "      Image will be converted to and saved as sRGB.",
                   file=sys.stderr)
-            final_image, icc_profile = convert_to_sRGB(final_image)
+            final_image, icc_profile = linear_to_sRGB(final_image)
             # convert the icc profile into bytes for tifffile to accept it
             icc_profile = ImageCms.ImageCmsProfile(icc_profile).tobytes()
         save_image(final_image, args.output_path, args.tiff_format, icc_profile)

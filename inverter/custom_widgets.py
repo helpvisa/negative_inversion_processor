@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (QApplication, QWidget, QGraphicsView,
                                QSpacerItem, QSizePolicy, QFrame)
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
 import numpy as np
-from colour_management import convert_to_sRGB
+from colour_management import linear_to_sRGB
 from global_vars import GLOBAL_FLAGS
 from edit_params import Stage
 
@@ -382,7 +382,7 @@ class ColorPicker(QWidget):
             self._color = color
             label_value = "    "
             # get final sRGB colour to use for preview
-            sRGB_color, _ = convert_to_sRGB(color)
+            sRGB_color, _ = linear_to_sRGB(color)
             color_clipped = np.clip(sRGB_color, max=1.0, min=0.0) * 255
             self.value_display.setStyleSheet(f"background-color: rgb({color_clipped[0]}, {color_clipped[1]}, {color_clipped[2]});")
             self.colorChanged.emit(color)

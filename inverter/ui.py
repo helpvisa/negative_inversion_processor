@@ -26,7 +26,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget,
                                QCheckBox, QGroupBox, QScrollArea, QComboBox,
                                QSizePolicy, QListWidget, QMessageBox)
 from custom_widgets import ImageView, LabeledSlider, ColorPicker
-from colour_management import convert_to_sRGB
+from colour_management import linear_to_sRGB
 from edit_params import EditParams, Stage
 from pipeline import ProcessingPipeline
 from processing import estimate_inversion_ratios
@@ -72,7 +72,7 @@ class PrimaryImageView(QWidget):
                 preview_image = np.stack((preview_image,
                                           preview_image,
                                           preview_image), axis=-1)
-            display_image, _ = convert_to_sRGB(preview_image)
+            display_image, _ = linear_to_sRGB(preview_image)
             display_image = np.clip(display_image, a_min=0, a_max=1)
             q_image = QImage(np.multiply(display_image, 255).astype(np.uint8),
                              display_image.shape[1],
@@ -292,7 +292,6 @@ class EditingDisplay(QWidget):
         self.current_active_export_threads = 0
 
         # controls
-        # demo controls
         self.current_file_label = QLabel("NO FILE LOADED")
         self.current_file_label.setSizePolicy(QSizePolicy.Policy.Preferred,
                                               QSizePolicy.Policy.Fixed)
@@ -300,6 +299,15 @@ class EditingDisplay(QWidget):
         self.load_button = QPushButton("Load Image")
         self.load_folder_button = QPushButton("Load Roll (Folder)")
         self.paste_parameters_to_roll_button = QPushButton("Paste Current Parameters to Entire Roll")
+        self.preview_quality_label = QLabel("Preview Quality")
+        self.preview_quality_combobox = QComboBox()
+        self.preview_quality_combobox.addItem("Low",
+                                              userData=640)
+        self.preview_quality_combobox.addItem("Medium (Default)",
+                                              userData=1280)
+        self.preview_quality_combobox.addItem("High",
+                                              userData=1920)
+        self.preview_quality_combobox.setCurrentIndex(1)
         self.profile_warning = QLabel("NIP processes all images in Linear Rec.2020.")
         self.profile_picker = QComboBox()
         self.profile_picker.addItem("sRGB Gamma 2.2",
@@ -337,9 +345,12 @@ class EditingDisplay(QWidget):
         # setup file management layout
         self.management_sidebar = QWidget()
         self.management_layout = QVBoxLayout()
+        self.preview_quality_layout = QHBoxLayout()
         self.load_layout = QHBoxLayout()
         self.export_layout = QVBoxLayout()
         self.format_layout = QHBoxLayout()
+        self.preview_quality_layout.addWidget(self.preview_quality_label)
+        self.preview_quality_layout.addWidget(self.preview_quality_combobox)
         self.load_layout.addWidget(self.load_button)
         self.load_layout.addWidget(self.load_folder_button)
         self.format_layout.addWidget(self.profile_picker)
@@ -348,6 +359,7 @@ class EditingDisplay(QWidget):
         self.export_layout.addLayout(self.format_layout)
         self.export_layout.addWidget(self.save_button)
         self.export_layout.addWidget(self.batch_export_button)
+        self.management_layout.addLayout(self.preview_quality_layout)
         self.management_layout.addLayout(self.load_layout)
         self.management_layout.addWidget(self.paste_parameters_to_roll_button)
         self.management_layout.addWidget(self.file_list)
@@ -369,13 +381,13 @@ class EditingDisplay(QWidget):
         # include some quick shorthand variables for readability
         tp = self.tool_panel
         ip = self.image_preview
-        # ep = self.edit_params
         self.load_button.clicked.connect(self.open_load_dialog)
         self.load_folder_button.clicked.connect(self.open_load_folder_dialog)
         self.paste_parameters_to_roll_button.clicked.connect(self.paste_parameters_to_entire_index)
         self.save_button.clicked.connect(self.open_save_dialog)
         self.batch_export_button.clicked.connect(self.open_batch_export_dialog)
         self.file_list.itemDoubleClicked.connect(self.handle_list_view_doubleclick)
+        self.preview_quality_combobox.currentIndexChanged.connect(self.handle_preview_size_change)
         PIPELINE.rawLoaded.connect(self.update_current_filename_display)
         PIPELINE.messageRaised.connect(self.push_message)
         PIPELINE.editParamsUpdated.connect(self.set_edit_params_from_pipeline)
@@ -553,6 +565,11 @@ class EditingDisplay(QWidget):
     def handle_list_view_doubleclick(self, list_widget: QListWidget):
         raw_text = list_widget.text()
         self.trigger_raw_load(raw_text)
+
+    def handle_preview_size_change(self, new_index):
+        new_size = self.preview_quality_combobox.itemData(new_index)
+        print(f"New preview size: {new_size}", file=sys.stderr)
+        PIPELINE.set_max_preview_size(int(new_size))
 
     def open_ffc_selection_dialog(self):
         filter_string = "Camera RAW ("

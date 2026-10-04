@@ -27,7 +27,7 @@ from custom_widgets import ImageView, ColorPicker
 from processing import (load_raw_image, apply_ffc, average_sample_point,
                         invert_to_density, to_density, density_to_luminance)
 from threads import WorkerThreadPool
-from colour_management import convert_to_sRGB
+from colour_management import linear_to_sRGB
 from global_vars import RAW_EXTENSIONS
 
 
@@ -68,7 +68,7 @@ class DensitometryView(QWidget):
                 display_image = np.stack((display_image,
                                           display_image,
                                           display_image), axis=-1)
-            display_image = convert_to_sRGB(image_data)
+            display_image = linear_to_sRGB(image_data)
             display_image = np.clip(image_data, a_min=0, a_max=1)
             q_image = QImage(np.multiply(display_image, 255).astype(np.uint8),
                              display_image.shape[1],

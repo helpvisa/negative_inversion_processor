@@ -39,7 +39,7 @@ from processing import (load_raw_image, save_image, rotate_image,
                         convert_to_grayscale_from_g,
                         apply_addition, apply_gain, apply_division, apply_ffc)
 from custom_widgets import ColorPicker
-from colour_management import (aces_tonemap, convert_to_sRGB, convert_to_g22)
+from colour_management import (aces_tonemap, linear_to_sRGB, convert_to_g22)
 from sidecars import update_sidecar, load_params_from_sidecar
 from global_vars import PHOTO_INDEX
 
@@ -438,7 +438,7 @@ class ProcessingPipeline(QObject):
                 if working_image.ndim < 3:
                     working_image = convert_to_g22(working_image)
                 else:
-                    working_image, _ = convert_to_sRGB(working_image)
+                    working_image, _ = linear_to_sRGB(working_image)
             profile_path = current_root / ".." / "icc_profiles" / icc_name
             try:
                 with open(profile_path, "rb") as icc_file:
@@ -573,3 +573,8 @@ class ProcessingPipeline(QObject):
             value = average_sample_point(self.grade_inter,
                                          point_x, point_y, 16)
             picker.update_color(value)
+
+    @Slot()
+    def set_max_preview_size(self, max_preview_size):
+        self.max_preview_size = max_preview_size
+        self.load_raw_file(self.currently_loaded_filename)

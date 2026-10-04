@@ -15,36 +15,9 @@
 
 import numpy as np
 import PyOpenColorIO as ocio
-from colour import (RGB_to_XYZ, XYZ_to_RGB, RGB_COLOURSPACES, CCS_ILLUMINANTS,
-                    cctf_encoding)
+from colour import (RGB_to_XYZ, RGB_to_RGB, XYZ_to_RGB,
+                    RGB_COLOURSPACES, CCS_ILLUMINANTS, cctf_encoding)
 from PIL import ImageCms
-from processing import convert_to_grayscale
-from global_vars import REC2020_WEIGHTS
-
-
-def noritsu_tonemap(image_data, contrast: float = 1.0, toe: float = 0.0):
-    """
-    Affect overall tone using 'noritsu-style' tone curve
-    https://github.com/rohanpandula/noritsu-tool/blob/main/noritsu/render.py
-    See THIRD_PARTY_LICENSES.txt for more details.
-    """
-    v = image_data
-    # affect overall tone using 'noritsu-style' tone curve
-    # https://github.com/rohanpandula/noritsu-tool/blob/main/noritsu/render.py
-    k = contrast
-    pts_x = np.array([0.0, 0.08, 0.25, 0.5, 0.75, 0.92, 1.0])
-    # s-shaped curve, midtones pinned
-    mid = 0.5
-    pts_y = mid + (pts_x - mid) * k
-    # toe
-    pts_y = pts_y + toe * (1.0 - pts_x) * np.exp(-pts_x * 4.0)
-    pts_y = np.clip(pts_y, 0.0, 1.0)
-    # make sure line is straight (no hills or valleys == monotonic)
-    for i in range(1, len(pts_y)):
-        if pts_y[i] < pts_y[i - 1]:
-            pts_y[i] = pts_y[i - 1]
-    v = np.interp(v, pts_x, pts_y)
-    return np.clip(v, 0.0, 1.0)
 
 
 def aces_tonemap(image_data, toe: float = 0.0):
@@ -89,67 +62,50 @@ def aces_tonemap(image_data, toe: float = 0.0):
     return np.clip(out_data, 0.0, 1.0)
 
 
-def filmic_curve(x,
-                 shoulder_strength=0.22,
-                 linear_strength=0.30, linear_angle=0.10,
-                 toe_strength=0.20, toe_numerator=0.01, toe_denominator=0.30):
+def linear_to_ACEScc(image_data):
     """
-    Fully tweakable filmic tone curve.
+    Convert the given image data from Linear Rec.2020 to ACEScc.
     """
-    A = shoulder_strength
-    B = linear_strength
-    C = linear_angle
-    D = toe_strength
-    E = toe_numerator
-    F = toe_denominator
+    acescc_image = RGB_to_RGB(
+        image_data,
+        RGB_COLOURSPACES['ITU-R BT.2020'],
+        RGB_COLOURSPACES['ACEScc'],
+        chromatic_adaptation_transform='CAT02',
+        apply_cctf_decoding=False,  # input is already linear
+        apply_cctf_encoding=True
+    )
+    return acescc_image
 
-    return ((x * (A * x + C * B) + D * E) / (x * (A * x + B) + D * F)) - (E / F)
 
-
-def filmic_tonemap(image_data,
-                   max_white=11.2,
-                   toe_strength=0.20, shoulder_strength=0.22):
+def acescc_to_linear(image_data):
     """
-    Filmic tonemapper built on filmic curve.
+    Convert the given image data from Linear Rec.2020 to ACEScc.
     """
-    curve = filmic_curve(image_data,
-                         shoulder_strength=shoulder_strength,
-                         toe_strength=toe_strength)
-    scale = filmic_curve(max_white,
-                         shoulder_strength=shoulder_strength,
-                         toe_strength=toe_strength)
-    return np.clip(curve / scale, 0.0, 1.0)
-    
+    linear_image = RGB_to_RGB(
+        image_data,
+        RGB_COLOURSPACES['ACEScc'],
+        RGB_COLOURSPACES['ITU-R BT.2020'],
+        chromatic_adaptation_transform='CAT02',
+        apply_cctf_decoding=False,  # input is already logarithmic
+        apply_cctf_encoding=True
+    )
+    return linear_image
 
 
-def reinhard_tonemap(image_data, key=1.0):
-    """
-    Basic tonemapping from HDR to 0.0 <-> 1.0.
-    Can cause strange hue shifts due to film carrier creeping into image.
-    Key value represents max luminance.
-    """
-    lum = convert_to_grayscale(image_data, REC2020_WEIGHTS)
-    log_lum = np.log(lum + 1e-8)
-    log_mean = np.mean(log_lum)
-    log_avg_lum = np.exp(log_mean)
-    scaled_lum = lum * (key / log_avg_lum)
-    compressed_lum = scaled_lum / (1 + scaled_lum)
-    final_scale = compressed_lum / (lum + 1e-8)
-    return image_data * final_scale[:, :, np.newaxis]
-
-
-def convert_to_sRGB(image_data):
+def linear_to_sRGB(image_data):
     """
     Convert the given image data from Linear Rec.2020 to sRGB.
+
+    Could probably be refactored to use RGB_to_RGB. Does it matter though?
     """
-    sRGB_conversion = RGB_to_XYZ(
+    xyz_conversion = RGB_to_XYZ(
         image_data,
         RGB_COLOURSPACES['ITU-R BT.2020'],
         CCS_ILLUMINANTS['CIE 1931 2 Degree Standard Observer']['D65'],
         apply_cctf_decoding=False
     )
     sRGB_image = XYZ_to_RGB(
-        sRGB_conversion,
+        xyz_conversion,
         RGB_COLOURSPACES['sRGB'],
         apply_cctf_encoding=True
     )
