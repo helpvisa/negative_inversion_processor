@@ -308,9 +308,9 @@ class ProcessingPipeline(QObject):
             # do this in the ACEScc colour space (logarithmic), then convert
             # back to linear rec.2020 for tonemapping
             self.final_preview = linear_to_ACEScct(self.grade_inter)
-            self.final_preview = np.pow(np.maximum(self.final_preview * ep.slope + ep.offset, 0.0),
-                                        ep.power)
+            self.final_preview = np.maximum(self.final_preview * ep.slope + ep.offset, 0.0)
             self.final_preview = acescct_to_linear(self.final_preview)
+            self.final_preview = np.pow(self.final_preview, ep.power)
             # apply final makeup gain
             # we first convert exposure from stops -> gain
             exposure_gain = math.pow(2, ep.final_exposure)
@@ -417,9 +417,9 @@ class ProcessingPipeline(QObject):
             # tonemap
             # ASC CDL
             working_image = linear_to_ACEScct(working_image)
-            working_image = np.pow(np.maximum(working_image * ep.slope + ep.offset, 0.0),
-                                   ep.power)
+            working_image = np.maximum(working_image * ep.slope + ep.offset, 0.0)
             working_image = acescct_to_linear(working_image)
+            working_image = np.pow(working_image, ep.power)
             # apply final makeup gain
             exposure_gain = math.pow(2, ep.final_exposure)
             if not ep.bw_mode:

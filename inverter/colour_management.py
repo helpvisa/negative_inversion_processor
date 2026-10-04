@@ -15,8 +15,9 @@
 
 import numpy as np
 import PyOpenColorIO as ocio
-from colour import (RGB_to_XYZ, RGB_to_RGB, XYZ_to_RGB,
-                    RGB_COLOURSPACES, CCS_ILLUMINANTS, cctf_encoding)
+from colour import (RGB_to_XYZ, XYZ_to_RGB,
+                    RGB_COLOURSPACES, CCS_ILLUMINANTS,
+                    cctf_encoding, cctf_decoding)
 from PIL import ImageCms
 
 
@@ -64,48 +65,28 @@ def aces_tonemap(image_data, toe: float = 0.0):
 
 def linear_to_ACEScct(image_data):
     """
-    Convert the given image data from Linear Rec.2020 to ACEScc.
+    Convert the given image data's transfer function from linear to ACEScct.
+
+    Notably, uses Linear Rec.2020 primaries to avoid imaginary colours and
+    prevent negative values from being introduced into the pipeline when
+    converting back to a linear transfer function.
+
+    This is purely a difference in the transfer function
     """
-    is_grayscale = True if image_data.ndim < 3 else False
-    editable_image = image_data
-    if is_grayscale:
-        editable_image = np.stack((image_data,
-                                   image_data,
-                                   image_data), axis=-1)
-    acescct_image = RGB_to_RGB(
-        editable_image,
-        RGB_COLOURSPACES['ITU-R BT.2020'],
-        RGB_COLOURSPACES['ACEScct'],
-        chromatic_adaptation_transform='CAT02',
-        apply_cctf_decoding=True,
-        apply_cctf_encoding=True
-    )
-    if is_grayscale:
-        acescct_image = acescct_image[:, :, 1]
-    return acescct_image
+    cct_image = cctf_encoding(image_data, function='ACEScct')
+    return cct_image
 
 
 def acescct_to_linear(image_data):
     """
-    Convert the given image data from Linear Rec.2020 to ACEScc.
+    Convert the given image data's transfer function from ACEScct to
+    linear. See note in `linear_to_ACEScct` above.
     """
-    is_grayscale = True if image_data.ndim < 3 else False
-    editable_image = image_data
-    if is_grayscale:
-        editable_image = np.stack((image_data,
-                                   image_data,
-                                   image_data), axis=-1)
-    linear_image = RGB_to_RGB(
-        editable_image,
-        RGB_COLOURSPACES['ACEScct'],
-        RGB_COLOURSPACES['ITU-R BT.2020'],
-        chromatic_adaptation_transform='CAT02',
-        apply_cctf_decoding=True,
-        apply_cctf_encoding=True
-    )
-    if is_grayscale:
-        linear_image = linear_image[:, :, 1]
-    return linear_image
+    linear_image = cctf_decoding(image_data, function='ACEScct')
+    # clamp the minimum value to 0.0; sometimes ACEScct likes to return negative
+    # values here when re-linearizing. Is clamping evil? Not sure, but it looks
+    # much much better
+    return np.maximum(linear_image, 0.0)
 
 
 def linear_to_sRGB(image_data):

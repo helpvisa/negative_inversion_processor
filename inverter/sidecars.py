@@ -81,27 +81,22 @@ def load_params_from_sidecar(filepath):
                 sidecar = json.loads(f.read())
                 for key in sidecar:
                     if key == 'base_color_xy':
-                        print(f"Setting value for {key}", file=sys.stderr)
                         bc_xy_list = sidecar[key]
                         bc_xy_tuple = (bc_xy_list[0], bc_xy_list[1]) if bc_xy_list else None
                         ep.base_color_xy = bc_xy_tuple
                     elif key == 'base_color':
-                        print(f"Setting value for {key}", file=sys.stderr)
                         bc_list = sidecar['base_color']
                         bc_tuple = np.array([bc_list[0], bc_list[1], bc_list[2]]) if bc_list else None
                         ep.base_color = bc_tuple
                     elif key == 'wb_xy':
-                        print(f"Setting value for {key}", file=sys.stderr)
                         wb_xy_list = sidecar['wb_xy']
                         wb_xy_tuple = (wb_xy_list[0], wb_xy_list[1]) if wb_xy_list else None
                         ep.wb_xy = wb_xy_tuple
                     elif key == 'wb_reference':
-                        print(f"Setting value for {key}", file=sys.stderr)
                         wb_list = sidecar['wb_reference']
                         wb_tuple = np.array([wb_list[0], wb_list[1], wb_list[2]]) if wb_list else None
                         ep.wb_reference = wb_tuple
                     else:
-                        print(f"Setting value for {key}", file=sys.stderr)
                         setattr(ep, key, sidecar[key])
                 return ep
         except FileNotFoundError:
