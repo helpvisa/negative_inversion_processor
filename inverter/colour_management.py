@@ -62,33 +62,49 @@ def aces_tonemap(image_data, toe: float = 0.0):
     return np.clip(out_data, 0.0, 1.0)
 
 
-def linear_to_ACEScc(image_data):
+def linear_to_ACEScct(image_data):
     """
     Convert the given image data from Linear Rec.2020 to ACEScc.
     """
-    acescc_image = RGB_to_RGB(
-        image_data,
+    is_grayscale = True if image_data.ndim < 3 else False
+    editable_image = image_data
+    if is_grayscale:
+        editable_image = np.stack((image_data,
+                                   image_data,
+                                   image_data), axis=-1)
+    acescct_image = RGB_to_RGB(
+        editable_image,
         RGB_COLOURSPACES['ITU-R BT.2020'],
-        RGB_COLOURSPACES['ACEScc'],
+        RGB_COLOURSPACES['ACEScct'],
         chromatic_adaptation_transform='CAT02',
-        apply_cctf_decoding=False,  # input is already linear
+        apply_cctf_decoding=True,
         apply_cctf_encoding=True
     )
-    return acescc_image
+    if is_grayscale:
+        acescct_image = acescct_image[:, :, 1]
+    return acescct_image
 
 
-def acescc_to_linear(image_data):
+def acescct_to_linear(image_data):
     """
     Convert the given image data from Linear Rec.2020 to ACEScc.
     """
+    is_grayscale = True if image_data.ndim < 3 else False
+    editable_image = image_data
+    if is_grayscale:
+        editable_image = np.stack((image_data,
+                                   image_data,
+                                   image_data), axis=-1)
     linear_image = RGB_to_RGB(
-        image_data,
-        RGB_COLOURSPACES['ACEScc'],
+        editable_image,
+        RGB_COLOURSPACES['ACEScct'],
         RGB_COLOURSPACES['ITU-R BT.2020'],
         chromatic_adaptation_transform='CAT02',
-        apply_cctf_decoding=False,  # input is already logarithmic
+        apply_cctf_decoding=True,
         apply_cctf_encoding=True
     )
+    if is_grayscale:
+        linear_image = linear_image[:, :, 1]
     return linear_image
 
 

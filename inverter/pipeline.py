@@ -36,10 +36,12 @@ from processing import (load_raw_image, save_image, rotate_image,
                         white_balance, density_balance,
                         average_sample_point,
                         invert_to_density, to_density, density_to_luminance,
-                        convert_to_grayscale_from_g,
-                        apply_addition, apply_gain, apply_division, apply_ffc)
+                        convert_to_grayscale_from_g, apply_addition,
+                        apply_gain, apply_ffc)
 from custom_widgets import ColorPicker
-from colour_management import (aces_tonemap, linear_to_sRGB, convert_to_g22)
+from colour_management import (aces_tonemap, linear_to_ACEScct,
+                               acescct_to_linear, linear_to_sRGB,
+                               convert_to_g22)
 from sidecars import update_sidecar, load_params_from_sidecar
 from global_vars import PHOTO_INDEX
 
@@ -114,13 +116,14 @@ class ProcessingPipeline(QObject):
                                    'root.base_color[0]', 'root.base_color[1]',
                                    'root.base_color[2]']
                 inv_changes = ['root.skip_inversion']
-                ratio_changes = ['root.pivot', 'root.red_ratio', 'root.blue_ratio',
-                                 'root.green_exponent', 'root.bw_mode']
+                ratio_changes = ['root.pivot', 'root.red_ratio',
+                                 'root.blue_ratio', 'root.green_exponent',
+                                 'root.bw_mode']
                 grade_changes = ['root.red_gain', 'root.green_gain',
-                                 'root.blue_gain', 'root.wb_red', 'root.wb_green',
-                                 'root.wb_blue', 'root.slope', 'root.offset',
-                                 'root.power']
-                tonemap_changes = ['root.final_exposure', 'root.tonemap']
+                                 'root.blue_gain', 'root.wb_red',
+                                 'root.wb_green', 'root.wb_blue']
+                tonemap_changes = ['root.final_exposure', 'root.tonemap',
+                                   'root.slope', 'root.offset', 'root.power']
                 if 'root.ffc_image' in changes or 'root.ffc_image' in type_changes:
                     print("ffc_image changed!", file=sys.stderr)
                     if self.edit_params.ffc_image:
@@ -283,9 +286,6 @@ class ProcessingPipeline(QObject):
                 # tune (addition)
                 add_tuple = (ep.wb_red, ep.wb_green, ep.wb_blue)
                 self.grade_inter = apply_addition(self.grade_inter, add_tuple)
-            # apply ASC CDL
-            self.grade_inter = np.pow(np.maximum(self.grade_inter * ep.slope + ep.offset, 0.0),
-                                      ep.power)
             # then convert to luminance
             self.grade_inter = density_to_luminance(self.grade_inter)
             if ep.bw_mode:
@@ -304,6 +304,13 @@ class ProcessingPipeline(QObject):
         ep = self.edit_params
 
         def current():
+            # apply ASC CDL
+            # do this in the ACEScc colour space (logarithmic), then convert
+            # back to linear rec.2020 for tonemapping
+            self.final_preview = linear_to_ACEScct(self.grade_inter)
+            self.final_preview = np.pow(np.maximum(self.final_preview * ep.slope + ep.offset, 0.0),
+                                        ep.power)
+            self.final_preview = acescct_to_linear(self.final_preview)
             # apply final makeup gain
             # we first convert exposure from stops -> gain
             exposure_gain = math.pow(2, ep.final_exposure)
@@ -311,9 +318,9 @@ class ProcessingPipeline(QObject):
                 exposure_tuple = (exposure_gain,
                                   exposure_gain,
                                   exposure_gain)
-                self.final_preview = apply_gain(self.grade_inter, exposure_tuple)
+                self.final_preview = apply_gain(self.final_preview, exposure_tuple)
             else:
-                self.final_preview = self.grade_inter * exposure_gain
+                self.final_preview = self.final_preview * exposure_gain
             if ep.tonemap:
                 self.final_preview = aces_tonemap(self.final_preview)
 
@@ -404,14 +411,16 @@ class ProcessingPipeline(QObject):
                 working_image = apply_gain(working_image, gain_tuple)
                 add_tuple = (ep.wb_red, ep.wb_green, ep.wb_blue)
                 working_image = apply_addition(working_image, add_tuple)
-            # apply ASC CDL
-            working_image = np.pow(np.maximum(working_image * ep.slope + ep.offset, 0.0),
-                                   ep.power)
             working_image = density_to_luminance(working_image)
             if ep.bw_mode:
                 working_image = convert_to_grayscale_from_g(working_image)
             # tonemap
-            # exposure gain from stops
+            # ASC CDL
+            working_image = linear_to_ACEScct(working_image)
+            working_image = np.pow(np.maximum(working_image * ep.slope + ep.offset, 0.0),
+                                   ep.power)
+            working_image = acescct_to_linear(working_image)
+            # apply final makeup gain
             exposure_gain = math.pow(2, ep.final_exposure)
             if not ep.bw_mode:
                 exposure_tuple = (exposure_gain,
