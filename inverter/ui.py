@@ -258,16 +258,21 @@ class ToolPanel(QWidget):
         cdl_layout.addWidget(self.slope_slider)
         cdl_layout.addWidget(self.offset_slider)
         cdl_layout.addWidget(self.power_slider)
+        self.final_contrast_slider = LabeledSlider("Final Contrast",
+                                                   0.1, 4.0, 1.0, 500,
+                                                   "#ffffff")
         self.exposure_slider = LabeledSlider("Exposure (Stops)",
                                              -10.0, 10.0, 0.0, 400)
         self.tonemap_checkbox = QCheckBox("Apply Tonemapping")
         tonemap_layout.addLayout(cdl_layout)
+        tonemap_layout.addWidget(self.final_contrast_slider)
         tonemap_layout.addWidget(self.exposure_slider)
         tonemap_layout.addWidget(self.tonemap_checkbox)
         tonemap_groupbox.setLayout(tonemap_layout)
         self.tools.extend([self.slope_slider,
                            self.offset_slider,
                            self.power_slider,
+                           self.final_contrast_slider,
                            self.exposure_slider,
                            self.tonemap_checkbox])
         # --- add all layouts
@@ -511,6 +516,7 @@ class EditingDisplay(QWidget):
         ep.wb_red = tp.red_tune_slider.value()
         ep.wb_green = tp.green_tune_slider.value()
         ep.wb_blue = tp.blue_tune_slider.value()
+        ep.final_contrast = tp.final_contrast_slider.value()
         ep.final_exposure = tp.exposure_slider.value()
         ep.tonemap = tp.tonemap_checkbox.isChecked()
         ep.slope = tp.slope_slider.value()
@@ -549,6 +555,7 @@ class EditingDisplay(QWidget):
         tp.red_tune_slider.setValue(ep.wb_red)
         tp.green_tune_slider.setValue(ep.wb_green)
         tp.blue_tune_slider.setValue(ep.wb_blue)
+        tp.final_contrast_slider.setValue(ep.final_contrast)
         tp.exposure_slider.setValue(ep.final_exposure)
         tp.tonemap_checkbox.setChecked(ep.tonemap)
         tp.slope_slider.setValue(ep.slope)

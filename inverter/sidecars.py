@@ -53,6 +53,7 @@ def update_sidecar(filepath):
             "slope": ep.slope,
             "offset": ep.offset,
             "power": ep.power,
+            "final_contrast": ep.final_contrast,
             "final_exposure": ep.final_exposure,
             "tonemap": ep.tonemap,
         }
