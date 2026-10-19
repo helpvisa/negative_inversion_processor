@@ -9,6 +9,7 @@ __pycache__/
 *.swo
 *.tiff
 *.xmp
+*.test*
 
 # testing files
 *.nef
