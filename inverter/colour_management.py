@@ -13,13 +13,16 @@
 # You should have received a copy of the GNU General Public License along with
 # Negative Inversion Processor. If not, see <https://www.gnu.org/licenses/>. 
 
+import sys
 import numpy as np
 import PyOpenColorIO as ocio
-from colour import (RGB_to_XYZ, XYZ_to_RGB,
+from colour import (RGB_to_XYZ, XYZ_to_RGB, RGB_to_RGB,
                     RGB_COLOURSPACES, CCS_ILLUMINANTS,
                     cctf_encoding, cctf_decoding)
 from PIL import ImageCms
+from global_vars import SUPPORTED_PROFILES
 
+SUPPORTED_PROFILES = sorted(RGB_COLOURSPACES.keys())
 
 def aces_tonemap(image_data, toe: float = 0.0):
     """
@@ -87,6 +90,34 @@ def acescct_to_linear(image_data):
     # values here when re-linearizing. Is clamping evil? Not sure, but it looks
     # much much better
     return np.maximum(linear_image, 0.0)
+
+
+def convert_colourspace(image_data, input_colourspace, output_colourspace):
+    """
+    Convert from any supported 'input_colourspace' to any supported
+    'output_colourspace'. Preserves grayscale.
+    """
+    if input_colourspace in SUPPORTED_PROFILES and \
+       output_colourspace in SUPPORTED_PROFILES:
+        is_grayscale = True if image_data.ndim < 3 else False
+        input_image = image_data
+        if is_grayscale:
+            input_image = np.stack((image_data,
+                                    image_data,
+                                    image_data), axis=-1)
+        output_image = RGB_to_RGB(input_image,
+                                  RGB_COLOURSPACES[input_colourspace],
+                                  RGB_COLOURSPACES[output_colourspace],
+                                  chromatic_adaptation_transform="CAT02",
+                                  apply_cctf_decoding=True,
+                                  apply_cctf_encoding=True)
+        if is_grayscale:
+            output_image = output_image[:, :, 1]
+        return output_image
+    print("ERROR: Cannot convert colourspace! Profile not suppported,"
+          "Returning original, unconverted image.",
+          file=sys.stderr)
+    return image_data
 
 
 def linear_to_sRGB(image_data):
