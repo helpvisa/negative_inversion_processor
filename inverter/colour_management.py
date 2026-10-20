@@ -14,15 +14,18 @@
 # Negative Inversion Processor. If not, see <https://www.gnu.org/licenses/>. 
 
 import sys
+import math
 import numpy as np
 import PyOpenColorIO as ocio
 from colour import (RGB_to_XYZ, XYZ_to_RGB, RGB_to_RGB,
                     RGB_COLOURSPACES, CCS_ILLUMINANTS,
-                    cctf_encoding, cctf_decoding)
+                    cctf_encoding, cctf_decoding, read_LUT)
 from PIL import ImageCms
-from global_vars import SUPPORTED_PROFILES
 
-SUPPORTED_PROFILES = sorted(RGB_COLOURSPACES.keys())
+
+def get_supported_colour_profiles():
+    return sorted(RGB_COLOURSPACES.keys())
+
 
 def aces_tonemap(image_data, toe: float = 0.0):
     """
@@ -66,6 +69,47 @@ def aces_tonemap(image_data, toe: float = 0.0):
     return np.clip(out_data, 0.0, 1.0)
 
 
+def sigmoid_paper_response(value, magnitude,
+                           film_fog, film_power,
+                           paper_exp, paper_power) -> float:
+    clamped_val = math.max(value, 0.0)
+    film_response = math.pow(film_fog + clamped_val, film_power)
+    paper_response = magnitude * math.pow(film_response / (paper_exp + film_response),
+                                          paper_power)
+    if math.isnan(paper_response):
+        return magnitude
+    return paper_response
+
+
+def sigmoid_tonemap(image_data,
+                    white_target=1.0, black_target=0.0152,
+                    contrast=1.5, skew=-0.2, hue_preservation=0.0,
+                    red_inset=0.1, green_inset=0.1, blue_inset=0.15,
+                    # rotations are in radians (2deg, -1deg, -3deg)
+                    red_rot=0.0350, green_rot=-0.0175, blue_rot=-0.0524,
+                    purity=0.0):
+    """
+    Sigmoid-style tonemapper inspired by darktable. Defaults based on "smooth"
+    preset.
+
+    https://github.com/darktable-org/darktable/blob/master/src/iop/sigmoid.c
+    """
+    # calculate reference values
+    middle_gray = 0.1845
+    film_power = contrast
+    paper_power = 1.0
+    magnitude = 1.0
+    film_fog = 1.0
+    paper_exposure = math.pow(film_fog + middle_gray, film_power) * ((magnitude / middle_gray) - 1.0)
+    delta = 1e-6
+    # slope = 
+
+    red = image_data[:, :, 0]
+    green = image_data[:, :, 1]
+    blue = image_data[:, :, 2]
+    # response_r = red.pow(,)
+
+
 def linear_to_ACEScct(image_data):
     """
     Convert the given image data's transfer function from linear to ACEScct.
@@ -97,8 +141,9 @@ def convert_colourspace(image_data, input_colourspace, output_colourspace):
     Convert from any supported 'input_colourspace' to any supported
     'output_colourspace'. Preserves grayscale.
     """
-    if input_colourspace in SUPPORTED_PROFILES and \
-       output_colourspace in SUPPORTED_PROFILES:
+    supported_profiles = get_supported_colour_profiles()
+    if input_colourspace in supported_profiles and \
+       output_colourspace in supported_profiles:
         is_grayscale = True if image_data.ndim < 3 else False
         input_image = image_data
         if is_grayscale:
@@ -118,6 +163,30 @@ def convert_colourspace(image_data, input_colourspace, output_colourspace):
           "Returning original, unconverted image.",
           file=sys.stderr)
     return image_data
+
+
+def apply_lut(image_data, input_colourspace, output_colourspace, lut_name):
+    """
+    Apply 3D LUT, accounting for input and output colourspaces.
+    """
+    lut = read_LUT(lut_name)
+    # reshape image_data into flat 0-dimension list
+    is_grayscale = True if image_data.ndim < 3 else False
+    input_image = image_data
+    if is_grayscale:
+        input_image = np.stack((image_data,
+                                image_data,
+                                image_data), axis=-1)
+    ref_image = convert_colourspace(input_image,
+                                    "ITU-R BT.2020", input_colourspace)
+    flat_image = ref_image.reshape(-1, 3)
+    graded_image = lut.apply(flat_image)
+    # now reshape back
+    final_image = convert_colourspace(graded_image.reshape(input_image.shape),
+                                      output_colourspace, "ITU-R BT.2020")
+    if is_grayscale:
+        final_image = final_image[:, :, 1]
+    return final_image
 
 
 def linear_to_sRGB(image_data):

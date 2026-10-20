@@ -26,7 +26,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget,
                                QCheckBox, QGroupBox, QScrollArea, QComboBox,
                                QSizePolicy, QListWidget, QMessageBox)
 from custom_widgets import ImageView, LabeledSlider, ColorPicker
-from colour_management import linear_to_sRGB
+from colour_management import linear_to_sRGB, get_supported_colour_profiles
 from edit_params import EditParams, Stage
 from pipeline import ProcessingPipeline
 from processing import estimate_inversion_ratios
@@ -246,6 +246,9 @@ class ToolPanel(QWidget):
         tonemap_groupbox = QGroupBox("Tonemapping and Output")
         tonemap_layout = QVBoxLayout()
         cdl_layout = QHBoxLayout()
+        tonemap_checkbox_layout = QHBoxLayout()
+        lut_label_layout = QHBoxLayout()
+        lut_layout = QHBoxLayout()
         self.slope_slider = LabeledSlider("Slope",
                                           0.5, 2.0, 1.0, 500,
                                           "#ababab")
@@ -264,17 +267,46 @@ class ToolPanel(QWidget):
         self.exposure_slider = LabeledSlider("Exposure (Stops)",
                                              -10.0, 10.0, 0.0, 400)
         self.tonemap_checkbox = QCheckBox("Apply Tonemapping")
+        self.lut_checkbox = QCheckBox("Apply LUT")
+        tonemap_checkbox_layout.addWidget(self.tonemap_checkbox)
+        tonemap_checkbox_layout.addWidget(self.lut_checkbox)
+        self.lut_input_combobox_label = QLabel("LUT Input Colourspace")
+        self.lut_input_combobox = QComboBox()
+        self.lut_output_combobox_label = QLabel("LUT Output Colourspace")
+        self.lut_output_combobox = QComboBox()
+        # add all known profiles in colour_science library to comboboxes
+        supported_profiles = get_supported_colour_profiles()
+        for entry in supported_profiles:
+            self.lut_input_combobox.addItem(entry, userData=entry)
+            self.lut_output_combobox.addItem(entry, userData=entry)
+        self.lut_input_combobox.setCurrentIndex(0)
+        self.lut_output_combobox.setCurrentIndex(0)
+        lut_label_layout.addWidget(self.lut_input_combobox_label)
+        lut_label_layout.addWidget(self.lut_output_combobox_label)
+        lut_layout.addWidget(self.lut_input_combobox)
+        lut_layout.addWidget(self.lut_output_combobox)
+        lut_selection_layout = QHBoxLayout()
+        self.lut_selection_label = QLabel("NO LUT.")
+        self.lut_selection_button = QPushButton("Load LUT")
+        lut_selection_layout.addWidget(self.lut_selection_label)
+        lut_selection_layout.addWidget(self.lut_selection_button)
         tonemap_layout.addLayout(cdl_layout)
         tonemap_layout.addWidget(self.final_contrast_slider)
         tonemap_layout.addWidget(self.exposure_slider)
-        tonemap_layout.addWidget(self.tonemap_checkbox)
+        tonemap_layout.addLayout(tonemap_checkbox_layout)
+        tonemap_layout.addLayout(lut_label_layout)
+        tonemap_layout.addLayout(lut_layout)
+        tonemap_layout.addLayout(lut_selection_layout)
         tonemap_groupbox.setLayout(tonemap_layout)
         self.tools.extend([self.slope_slider,
                            self.offset_slider,
                            self.power_slider,
                            self.final_contrast_slider,
                            self.exposure_slider,
-                           self.tonemap_checkbox])
+                           self.tonemap_checkbox,
+                           self.lut_checkbox,
+                           self.lut_input_combobox,
+                           self.lut_output_combobox])
         # --- add all layouts
         self.layout.addWidget(pre_inversion_groupbox)
         self.layout.addWidget(inversion_groupbox)
@@ -399,6 +431,7 @@ class EditingDisplay(QWidget):
         PIPELINE.photoIndexUpdated.connect(self.update_list_view)
         PIPELINE.saveFinished.connect(self.update_batch_export_status)
         tp.ffc_button.clicked.connect(self.open_ffc_selection_dialog)
+        tp.lut_selection_button.clicked.connect(self.open_lut_selection_dialog)
         tp.copy_params_button.clicked.connect(self.copy_parameters)
         tp.paste_params_button.clicked.connect(self.paste_parameters)
         tp.pre_inv_rotate_left.clicked.connect(lambda: self.update_rotation(1))
@@ -424,6 +457,8 @@ class EditingDisplay(QWidget):
                 tool.clicked.connect(self.update_edit_params)
             elif hasattr(tool, "valueChanged"):
                 tool.valueChanged.connect(self.update_edit_params)
+            elif hasattr(tool, "currentIndexChanged"):
+                tool.currentIndexChanged.connect(self.update_edit_params)
 
     def update_rotation(self, direction):
         ep = self.edit_params
@@ -522,6 +557,10 @@ class EditingDisplay(QWidget):
         ep.slope = tp.slope_slider.value()
         ep.offset = tp.offset_slider.value()
         ep.power = tp.power_slider.value()
+        ep.lut = tp.lut_checkbox.isChecked()
+        ep.lut_name = tp.lut_selection_label.text()
+        ep.lut_input_cs = tp.lut_input_combobox.currentData()
+        ep.lut_output_cs = tp.lut_output_combobox.currentData()
         if PIPELINE:
             PIPELINE.process_image(ep.copy())
 
@@ -561,6 +600,24 @@ class EditingDisplay(QWidget):
         tp.slope_slider.setValue(ep.slope)
         tp.offset_slider.setValue(ep.offset)
         tp.power_slider.setValue(ep.power)
+        tp.lut_checkbox.setChecked(ep.lut)
+        tp.lut_selection_label.setText(ep.lut_name)
+        # make sure that the selected profile actually exists
+        supported_profiles = get_supported_colour_profiles()
+        if ep.lut_input_cs not in supported_profiles:
+            self.push_message("ERROR: LUT Input Colourspace not available. "
+                              "Reverting to default.")
+            tp.lut_input_combobox.setCurrentIndex(0)
+        else:
+            in_idx = supported_profiles.index(ep.lut_input_cs)
+            tp.lut_input_combobox.setCurrentIndex(in_idx)
+        if ep.lut_output_cs not in supported_profiles:
+            self.push_message("ERROR: LUT Output Colourspace not available. "
+                              "Reverting to default.")
+            tp.lut_output_combobox.setCurrentIndex(0)
+        else:
+            out_idx = supported_profiles.index(ep.lut_output_cs)
+            tp.lut_output_combobox.setCurrentIndex(out_idx)
 
     def trigger_raw_load(self, image_path):
         global LOADED_RAW_PATH
@@ -591,6 +648,16 @@ class EditingDisplay(QWidget):
         self.push_message(f"FFC image set to {image_path}.")
         self.update_edit_params()
 
+    def open_lut_selection_dialog(self):
+        filter_string = "CUBE LUT (*.cube);; All Files (*)"
+        lut_path, _ = QFileDialog.getOpenFileName(
+            None,
+            caption="Select LUT",
+            filter=filter_string
+        )
+        self.tool_panel.lut_selection_label.setText(lut_path)
+        self.push_message(f"LUT set to {lut_path}.")
+        self.update_edit_params()
 
     def open_load_dialog(self):
         filter_string = "Camera RAW ("

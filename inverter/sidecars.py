@@ -56,6 +56,10 @@ def update_sidecar(filepath):
             "final_contrast": ep.final_contrast,
             "final_exposure": ep.final_exposure,
             "tonemap": ep.tonemap,
+            "lut": ep.lut,
+            "lut_name": ep.lut_name,
+            "lut_input_cs": ep.lut_input_cs,
+            "lut_output_cs": ep.lut_output_cs
         }
         # construct destination path
         final_path = filepath + ".nip.json"

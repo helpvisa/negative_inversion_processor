@@ -41,7 +41,7 @@ from processing import (load_raw_image, save_image, rotate_image,
 from custom_widgets import ColorPicker
 from colour_management import (aces_tonemap, linear_to_ACEScct,
                                acescct_to_linear, linear_to_sRGB,
-                               convert_to_g22)
+                               convert_to_g22, apply_lut)
 from sidecars import update_sidecar, load_params_from_sidecar
 from global_vars import PHOTO_INDEX
 
@@ -124,7 +124,9 @@ class ProcessingPipeline(QObject):
                                  'root.wb_green', 'root.wb_blue']
                 tonemap_changes = ['root.final_exposure', 'root.tonemap',
                                    'root.slope', 'root.offset', 'root.power',
-                                   'root.final_contrast']
+                                   'root.final_contrast', 'root.lut',
+                                   'root.lut_name', 'root.lut_input_cs',
+                                   'root.lut_output_cs']
                 if 'root.ffc_image' in changes or 'root.ffc_image' in type_changes:
                     print("ffc_image changed!", file=sys.stderr)
                     if self.edit_params.ffc_image:
@@ -323,6 +325,17 @@ class ProcessingPipeline(QObject):
                 self.final_preview = apply_gain(self.final_preview, exposure_tuple)
             else:
                 self.final_preview = self.final_preview * exposure_gain
+            if ep.lut:
+                # hardcode temporarily for testing
+                try:
+                    lut_graded_image = apply_lut(self.final_preview,
+                                                 ep.lut_input_cs,
+                                                 ep.lut_output_cs,
+                                                 ep.lut_name)
+                    self.final_preview = lut_graded_image
+                except Exception as e:
+                    print(e, file=sys.stderr)
+                    self.messageRaised.emit("ERROR: LUT file corrupted or not found!")
             if ep.tonemap:
                 self.final_preview = aces_tonemap(self.final_preview)
 
@@ -432,6 +445,16 @@ class ProcessingPipeline(QObject):
                 working_image = apply_gain(working_image, exposure_tuple)
             else:
                 working_image *= exposure_gain
+            if ep.lut:
+                # hardcode temporarily for testing
+                lut_graded_image = apply_lut(working_image,
+                                             ep.lut_input_cs,
+                                             ep.lut_output_cs,
+                                             ep.lut_name)
+                if lut_graded_image is not None:
+                    working_image = lut_graded_image
+                else:
+                    self.messageRaised.emit("ERROR: LUT file not found!")
             if ep.tonemap:
                 working_image = aces_tonemap(working_image)
             # assign correct ICC profile

@@ -33,9 +33,6 @@ RAW_EXTENSIONS = [
     "ptx", "pxn", "r3d", "raf", "raw", "rw2", "rwl", "sr2", "srf", "srw", "x3f"
 ]
 
-# populate in colour_management.py
-SUPPORTED_PROFILES = []
-
 # index of photos that have been loaded
 # layout for each entry is:
 #   - file_name (index)

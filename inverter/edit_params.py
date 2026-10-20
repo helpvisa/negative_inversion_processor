@@ -69,6 +69,10 @@ class EditParams:
     slope: float = 1.0
     offset: float = 0.0
     power: float = 1.0
+    lut: bool = False
+    lut_name: str = None
+    lut_input_cs: str = "ITU-R BT.2020"
+    lut_output_cs: str = "ITU-R BT.709"
     
     tonemap: bool = False
     
