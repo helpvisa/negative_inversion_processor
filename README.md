@@ -35,12 +35,6 @@ outlined below:
    requirements.txt`)
 4. Run NIP in UI mode using `python3 ./inverter/ui.py`
 
-Included in this repository are also some shell scripts which demonstrate how
-the CLI component of NIP can be used for non-UI batch processing of
-negatives. Please be forewarned that the NIP CLI is not maintained at the same
-pace of the UI, and may not possess the full set of features exposed via the
-UI.
-
 The code in this repository is distributed under the terms of the GPLv3 , a
 copy of which should be present and included here in [`LICENSE`](LICENSE). This
 repository also contains some tonemapping functions which use code found in
