@@ -325,6 +325,8 @@ class ProcessingPipeline(QObject):
                 self.final_preview = apply_gain(self.final_preview, exposure_tuple)
             else:
                 self.final_preview = self.final_preview * exposure_gain
+            if ep.tonemap:
+                self.final_preview = aces_tonemap(self.final_preview)
             if ep.lut:
                 # hardcode temporarily for testing
                 try:
@@ -336,8 +338,6 @@ class ProcessingPipeline(QObject):
                 except Exception as e:
                     print(e, file=sys.stderr)
                     self.messageRaised.emit("ERROR: LUT file corrupted or not found!")
-            if ep.tonemap:
-                self.final_preview = aces_tonemap(self.final_preview)
 
         def proceed():
             self.previewUpdated.emit()
@@ -445,18 +445,18 @@ class ProcessingPipeline(QObject):
                 working_image = apply_gain(working_image, exposure_tuple)
             else:
                 working_image *= exposure_gain
-            if ep.lut:
-                # hardcode temporarily for testing
-                lut_graded_image = apply_lut(working_image,
-                                             ep.lut_input_cs,
-                                             ep.lut_output_cs,
-                                             ep.lut_name)
-                if lut_graded_image is not None:
-                    working_image = lut_graded_image
-                else:
-                    self.messageRaised.emit("ERROR: LUT file not found!")
             if ep.tonemap:
                 working_image = aces_tonemap(working_image)
+            if ep.lut:
+                try:
+                    lut_graded_image = apply_lut(working_image,
+                                                 ep.lut_input_cs,
+                                                 ep.lut_output_cs,
+                                                 ep.lut_name)
+                    working_image = lut_graded_image
+                except Exception as e:
+                    print(e, file=sys.stderr)
+                    self.messageRaised.emit("ERROR: LUT file corrupted or not found!")
             # assign correct ICC profile
             save_profile = None
             current_root = Path(__file__).resolve().parent

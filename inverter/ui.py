@@ -604,9 +604,12 @@ class EditingDisplay(QWidget):
         tp.lut_selection_label.setText(ep.lut_name)
         # make sure that the selected profile actually exists
         supported_profiles = get_supported_colour_profiles()
+        tp.lut_input_combobox.blockSignals(True)
+        tp.lut_output_combobox.blockSignals(True)
         if ep.lut_input_cs not in supported_profiles:
             self.push_message("ERROR: LUT Input Colourspace not available. "
                               "Reverting to default.")
+            # prevent recursion
             tp.lut_input_combobox.setCurrentIndex(0)
         else:
             in_idx = supported_profiles.index(ep.lut_input_cs)
@@ -614,10 +617,13 @@ class EditingDisplay(QWidget):
         if ep.lut_output_cs not in supported_profiles:
             self.push_message("ERROR: LUT Output Colourspace not available. "
                               "Reverting to default.")
+            tp.lut_output_combobox.blockSignals(True)
             tp.lut_output_combobox.setCurrentIndex(0)
         else:
             out_idx = supported_profiles.index(ep.lut_output_cs)
             tp.lut_output_combobox.setCurrentIndex(out_idx)
+        tp.lut_input_combobox.blockSignals(False)
+        tp.lut_output_combobox.blockSignals(False)
 
     def trigger_raw_load(self, image_path):
         global LOADED_RAW_PATH
