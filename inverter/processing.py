@@ -13,12 +13,13 @@
 # You should have received a copy of the GNU General Public License along with
 # Negative Inversion Processor. If not, see <https://www.gnu.org/licenses/>. 
 
+import io
 import sys
 import rawpy
 import tifffile
 import numpy as np
 from pathlib import Path
-from PIL import Image
+from PIL import Image, ImageCms
 from global_vars import RAW_EXTENSIONS
 
 
@@ -26,12 +27,16 @@ def load_raw_image(path, fast_mode=False):
     print(f"Loading image: {path}", file=sys.stderr)
     path_obj = Path(path)
     load = None
+    conversion_required = False
+    icc_data = None
     # see ui.py:552 for full explanation of [1:]
     if path_obj.suffix.lower()[1:] in ['tiff', 'tif']:
         load = tifffile.imread(path, return_as='numpy')
         # discard transparency
         if load.shape[-1] == 4 or load.size == 6553600:
             load = load[..., :3]
+        # prep for ICC conversion
+        conversion_required = True
     elif path_obj.suffix.lower()[1:] in RAW_EXTENSIONS:
         with rawpy.imread(path) as raw:
             demosaic_algo = rawpy.DemosaicAlgorithm.AHD
@@ -49,7 +54,10 @@ def load_raw_image(path, fast_mode=False):
                                    output_color=rawpy.ColorSpace.Rec2020)
     else:
         # make sure images are loaded as numpy arrays
-        load = np.asarray(Image.open(path))
+        img = Image.open(path)
+        icc_data = img.info.get("icc_profile")
+        load = np.asarray(img)
+        conversion_required = True
     # make sure any integer-based images operate within the 0.0 <-> 1.0 range
     # ==========================================================================
     # if loading a floating-point image, we can assume it is already operating
@@ -62,6 +70,22 @@ def load_raw_image(path, fast_mode=False):
         load = load.astype('float32') / 255.0
     elif load.dtype == 'uint16':
         load = load.astype('float32') / 65535.0
+    # convert colourspace if not RAW file
+    if conversion_required:
+        try:
+            current_root = Path(__file__).resolve().parent
+            output_profile_path = current_root / ".." / "icc_profiles" / "Rec2020-elle-V4-g10.icc"
+            input_profile = ImageCms.createProfile("sRGB")
+            if icc_data is not None:
+                input_profile = icc_data
+            from_image = Image.fromarray(load)
+            to_image = ImageCms.profileToProfile(from_image,
+                                                 inputProfile=input_profile,
+                                                 outputProfile=output_profile_path,
+                                                 renderingIntent=ImageCms.Intent.RELATIVE_COLORIMETRIC)
+            load = np.asarray(to_image)
+        except Exception as e:
+            print(e, file=sys.stderr)
     return load
 
 

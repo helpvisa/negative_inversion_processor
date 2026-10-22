@@ -71,8 +71,8 @@ class EditParams:
     power: float = 1.0
     lut: bool = False
     lut_name: str = None
-    lut_input_cs: str = "ITU-R BT.2020"
-    lut_output_cs: str = "ITU-R BT.709"
+    lut_input_cs: str = "DaVinci Wide Gamut"
+    lut_output_cs: str = "Gamma 2.2 Encoded Rec.709"
     
     tonemap: bool = False
     
