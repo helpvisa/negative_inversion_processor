@@ -16,7 +16,9 @@
 import sys
 import math
 import numpy as np
+import numpy.typing as npt
 import PyOpenColorIO as ocio
+from scipy.ndimage import map_coordinates
 from colour import (RGB_to_XYZ, XYZ_to_RGB, RGB_to_RGB,
                     RGB_COLOURSPACES, CCS_ILLUMINANTS,
                     cctf_encoding, cctf_decoding, read_LUT)
@@ -165,6 +167,25 @@ def convert_colourspace(image_data, input_colourspace, output_colourspace):
     return image_data
 
 
+def interpolate_3d_lut(image_data: np.ndarray,
+                           lut_cube: np.ndarray) -> np.ndarray:
+    """
+    Apply 3D LUT with trilinear interpolation across image_data.
+    Assumed input range is 0.0 <-> 1.0 and that input has 3D shape.
+    """
+    lut_size = lut_cube.shape[0]
+    scale = lut_size - 1.0
+    coords = (image_data * scale).reshape(-1, 3).T
+    out = np.empty_like(coords)
+    for c in range(3):
+        map_coordinates(lut_cube[..., c],
+                        coords,
+                        order=1,
+                        mode='nearest',
+                        output=out[c])
+    return out.T.reshape(image_data.shape)
+
+
 def apply_lut(image_data, input_colourspace, output_colourspace, lut_name):
     """
     Apply 3D LUT, accounting for input and output colourspaces.
@@ -179,9 +200,10 @@ def apply_lut(image_data, input_colourspace, output_colourspace, lut_name):
                                 image_data), axis=-1)
     ref_image = convert_colourspace(input_image,
                                     "ITU-R BT.2020", input_colourspace)
-    flat_image = ref_image.reshape(-1, 3)
-    graded_image = lut.apply(flat_image)
-    # now reshape back
+    # flat_image = ref_image.reshape(-1, 3)
+
+    # graded_image = lut.apply(flat_image)
+    graded_image = interpolate_3d_lut(ref_image, lut.table)
     final_image = convert_colourspace(graded_image.reshape(input_image.shape),
                                       output_colourspace, "ITU-R BT.2020")
     if is_grayscale:
