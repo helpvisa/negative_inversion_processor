@@ -168,10 +168,10 @@ def convert_colourspace(image_data, input_colourspace, output_colourspace):
 
 
 def interpolate_3d_lut(image_data: np.ndarray,
-                           lut_cube: np.ndarray) -> np.ndarray:
+                       lut_cube: np.ndarray) -> np.ndarray:
     """
     Apply 3D LUT with trilinear interpolation across image_data.
-    Assumed input range is 0.0 <-> 1.0 and that input has 3D shape.
+    Assumed input range is 0.0 <-> 1.0 with 3D shape.
     """
     lut_size = lut_cube.shape[0]
     scale = lut_size - 1.0
