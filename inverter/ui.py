@@ -502,9 +502,9 @@ class EditingDisplay(QWidget):
     def estimate_ratios(self, color):
         tp = self.tool_panel
         if PIPELINE.min_percentile is not None and \
-           PIPELINE.min_percentile.any() and \
+           PIPELINE.min_percentile.size > 0 and \
            PIPELINE.max_percentile is not None and \
-           PIPELINE.max_percentile.any():
+           PIPELINE.max_percentile.size > 0:
             red_ratio, blue_ratio = estimate_inversion_ratios(PIPELINE.min_percentile,
                                                               PIPELINE.max_percentile)
             tp.red_ratio_slider.setValue(red_ratio)
