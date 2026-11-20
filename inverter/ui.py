@@ -233,10 +233,8 @@ class ToolPanel(QWidget):
         self.grading_wb_picker = ColorPicker("Pick White Balance", Stage.GAIN_GRADE,
                                              hide_value=True)
         self.bpc_slider = LabeledSlider("Black Point Compensation",
-                                        0.0, 0.05, 0.0, 10000,
+                                        0.0, 0.1, 0.0, 50000,
                                         "#111111")
-        self.bpc_picker = ColorPicker("Pick Black Point", Stage.GAIN_GRADE,
-                                      hide_value=True)
         custom_grading_layout.addLayout(grading_gain_layout)
         custom_grading_layout.addLayout(grading_tune_layout)
         custom_grading_layout.addWidget(self.grading_wb_picker)
@@ -250,8 +248,7 @@ class ToolPanel(QWidget):
                            self.green_tune_slider,
                            self.blue_tune_slider,
                            self.grading_wb_picker,
-                           self.bpc_slider,
-                           self.bpc_picker])
+                           self.bpc_slider])
         # --- tonemapping and final output
         tonemap_groupbox = QGroupBox("Tonemapping and Output")
         tonemap_layout = QVBoxLayout()
@@ -455,16 +452,12 @@ class EditingDisplay(QWidget):
         tp.pre_inv_wb_picker.valueChanged.connect(PIPELINE.pick_color_from_image)
         tp.grading_wb_picker.pickRequested.connect(ip.view.enable_pick_mode)
         tp.grading_wb_picker.valueChanged.connect(PIPELINE.pick_color_from_image)
-        tp.bpc_picker.pickRequested.connect(ip.view.enable_pick_mode)
-        tp.bpc_picker.valueChanged.connect(PIPELINE.pick_color_from_image)
         # allow view to send values back
         ip.view.pointPicked.connect(tp.pre_inv_wb_picker.finish_pick)
         ip.view.pointPicked.connect(tp.grading_wb_picker.finish_pick)
-        ip.view.pointPicked.connect(tp.bpc_picker.finish_pick)
         # update base panel / grading panel if grading wb picked
         tp.pre_inv_wb_picker.colorChanged.connect(self.update_base_panel)
         tp.grading_wb_picker.colorChanged.connect(self.update_grading_panel)
-        tp.bpc_picker.colorChanged.connect(self.update_bpc)
         # update_edit_params on change of any subvalue of ToolPanel
         for tool in tp.tools:
             if hasattr(tool, "clicked"):
@@ -491,13 +484,6 @@ class EditingDisplay(QWidget):
         tp.red_tune_slider.setValue(color[1] - color[0])
         tp.green_tune_slider.setValue(color[1] - color[1])
         tp.blue_tune_slider.setValue(color[1] - color[2])
-
-    def update_bpc(self, color):
-        tp = self.tool_panel
-        black_point = convert_to_grayscale(color, REC2020_WEIGHTS)
-        # nudge slightly above pure black; be conservative to avoid clipping
-        black_point = max(0, black_point - 0.03)
-        tp.bpc_slider.setValue(black_point)
 
     def estimate_ratios(self, color):
         tp = self.tool_panel
