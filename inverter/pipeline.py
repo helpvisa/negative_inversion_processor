@@ -44,6 +44,7 @@ from colour_management import (aces_tonemap, linear_to_ACEScct,
                                convert_to_g22, apply_lut)
 from sidecars import update_sidecar, load_params_from_sidecar
 from global_vars import PHOTO_INDEX
+from helpers import get_resource_path
 
 
 # we must subclass QObject to leverage signals
@@ -459,7 +460,6 @@ class ProcessingPipeline(QObject):
                     self.messageRaised.emit("ERROR: LUT file corrupted or not found!")
             # assign correct ICC profile
             save_profile = None
-            current_root = Path(__file__).resolve().parent
             icc_name = "Rec2020-elle-V4-g10.icc"
             if icc_profile == 'rec2020':
                 if ep.bw_mode:
@@ -474,9 +474,9 @@ class ProcessingPipeline(QObject):
                     working_image = convert_to_g22(working_image)
                 else:
                     working_image, _ = linear_to_sRGB(working_image)
-            profile_path = current_root / ".." / "icc_profiles" / icc_name
+            profile_path = "icc_profiles/" + icc_name
             try:
-                with open(profile_path, "rb") as icc_file:
+                with open(get_resource_path(profile_path), "rb") as icc_file:
                     save_profile = icc_file.read()
             except FileNotFoundError:
                 print("Rec.2020 Profile not found on disk!", file=sys.stderr)

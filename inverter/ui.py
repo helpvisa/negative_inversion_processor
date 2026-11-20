@@ -32,6 +32,7 @@ from pipeline import ProcessingPipeline
 from processing import estimate_inversion_ratios
 from sidecars import load_params_from_sidecar, update_sidecar
 from global_vars import GLOBAL_FLAGS, PHOTO_INDEX, SAVE_FORMATS, RAW_EXTENSIONS
+from helpers import get_resource_path
 
 
 # some global variables for tracking information about the current session
@@ -830,7 +831,7 @@ if __name__ == "__main__":
     print(f"Running on {GLOBAL_FLAGS['platform']} platform",
           file=sys.stderr)
     # load custom QSS stylesheet
-    with open("inverter/styles.qss", "r") as qss:
+    with open(get_resource_path("inverter/styles.qss"), "r") as qss:
         _styles = qss.read()
         app.setStyleSheet(_styles)
     # set a global palette (should do this in stylesheet? enh)

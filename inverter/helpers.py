@@ -1,0 +1,15 @@
+import os
+import sys
+
+
+def get_resource_path(relative_path):
+    """
+    Get absolute path to resource, relative current executable.
+
+    Required for exporting bundled binaries with PyInstaller.
+    """
+    try:
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
