@@ -14,7 +14,6 @@
 # Negative Inversion Processor. If not, see <https://www.gnu.org/licenses/>. 
 
 import sys
-import time
 import numpy as np
 from pathlib import Path
 from PySide6.QtCore import Qt, Slot
@@ -29,9 +28,10 @@ from custom_widgets import ImageView, LabeledSlider, ColorPicker
 from colour_management import linear_to_sRGB, get_supported_colour_profiles
 from edit_params import EditParams, Stage
 from pipeline import ProcessingPipeline
-from processing import estimate_inversion_ratios
+from processing import estimate_inversion_ratios, convert_to_grayscale
 from sidecars import load_params_from_sidecar, update_sidecar
-from global_vars import GLOBAL_FLAGS, PHOTO_INDEX, SAVE_FORMATS, RAW_EXTENSIONS
+from global_vars import (GLOBAL_FLAGS, PHOTO_INDEX, SAVE_FORMATS,
+                         RAW_EXTENSIONS, REC2020_WEIGHTS)
 from helpers import get_resource_path
 
 
@@ -232,9 +232,16 @@ class ToolPanel(QWidget):
         grading_tune_layout.addWidget(self.blue_tune_slider)
         self.grading_wb_picker = ColorPicker("Pick White Balance", Stage.GAIN_GRADE,
                                              hide_value=True)
+        self.bpc_slider = LabeledSlider("Black Point Compensation",
+                                        0.0, 0.05, 0.0, 10000,
+                                        "#111111")
+        self.bpc_picker = ColorPicker("Pick Black Point", Stage.GAIN_GRADE,
+                                      hide_value=True)
         custom_grading_layout.addLayout(grading_gain_layout)
         custom_grading_layout.addLayout(grading_tune_layout)
         custom_grading_layout.addWidget(self.grading_wb_picker)
+        custom_grading_layout.addWidget(self.bpc_slider)
+        custom_grading_layout.addWidget(self.bpc_picker)
         custom_grading_groupbox.setLayout(custom_grading_layout)
         self.tools.extend([self.red_gain_slider,
                            self.green_gain_slider,
@@ -242,7 +249,9 @@ class ToolPanel(QWidget):
                            self.red_tune_slider,
                            self.green_tune_slider,
                            self.blue_tune_slider,
-                           self.grading_wb_picker])
+                           self.grading_wb_picker,
+                           self.bpc_slider,
+                           self.bpc_picker])
         # --- tonemapping and final output
         tonemap_groupbox = QGroupBox("Tonemapping and Output")
         tonemap_layout = QVBoxLayout()
@@ -446,12 +455,16 @@ class EditingDisplay(QWidget):
         tp.pre_inv_wb_picker.valueChanged.connect(PIPELINE.pick_color_from_image)
         tp.grading_wb_picker.pickRequested.connect(ip.view.enable_pick_mode)
         tp.grading_wb_picker.valueChanged.connect(PIPELINE.pick_color_from_image)
+        tp.bpc_picker.pickRequested.connect(ip.view.enable_pick_mode)
+        tp.bpc_picker.valueChanged.connect(PIPELINE.pick_color_from_image)
         # allow view to send values back
         ip.view.pointPicked.connect(tp.pre_inv_wb_picker.finish_pick)
         ip.view.pointPicked.connect(tp.grading_wb_picker.finish_pick)
+        ip.view.pointPicked.connect(tp.bpc_picker.finish_pick)
         # update base panel / grading panel if grading wb picked
         tp.pre_inv_wb_picker.colorChanged.connect(self.update_base_panel)
         tp.grading_wb_picker.colorChanged.connect(self.update_grading_panel)
+        tp.bpc_picker.colorChanged.connect(self.update_bpc)
         # update_edit_params on change of any subvalue of ToolPanel
         for tool in tp.tools:
             if hasattr(tool, "clicked"):
@@ -478,6 +491,13 @@ class EditingDisplay(QWidget):
         tp.red_tune_slider.setValue(color[1] - color[0])
         tp.green_tune_slider.setValue(color[1] - color[1])
         tp.blue_tune_slider.setValue(color[1] - color[2])
+
+    def update_bpc(self, color):
+        tp = self.tool_panel
+        black_point = convert_to_grayscale(color, REC2020_WEIGHTS)
+        # nudge slightly above pure black; be conservative to avoid clipping
+        black_point = max(0, black_point - 0.03)
+        tp.bpc_slider.setValue(black_point)
 
     def estimate_ratios(self, color):
         tp = self.tool_panel
@@ -552,6 +572,7 @@ class EditingDisplay(QWidget):
         ep.wb_red = tp.red_tune_slider.value()
         ep.wb_green = tp.green_tune_slider.value()
         ep.wb_blue = tp.blue_tune_slider.value()
+        ep.bpc = tp.bpc_slider.value()
         ep.final_contrast = tp.final_contrast_slider.value()
         ep.final_exposure = tp.exposure_slider.value()
         ep.tonemap = tp.tonemap_checkbox.isChecked()
@@ -595,6 +616,7 @@ class EditingDisplay(QWidget):
         tp.red_tune_slider.setValue(ep.wb_red)
         tp.green_tune_slider.setValue(ep.wb_green)
         tp.blue_tune_slider.setValue(ep.wb_blue)
+        tp.bpc_slider.setValue(ep.bpc)
         tp.final_contrast_slider.setValue(ep.final_contrast)
         tp.exposure_slider.setValue(ep.final_exposure)
         tp.tonemap_checkbox.setChecked(ep.tonemap)

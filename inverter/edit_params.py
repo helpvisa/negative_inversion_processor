@@ -61,6 +61,8 @@ class EditParams:
     wb_red: float = 0.0
     wb_green: float = 0.0
     wb_blue: float = 0.0
+    # black point compensation
+    bpc: float = 0.0
 
     # --- brightness, look, and tonemapping
     # exposure is measured in stops, so a 0 stop adjustment is default

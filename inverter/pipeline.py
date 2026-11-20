@@ -122,7 +122,8 @@ class ProcessingPipeline(QObject):
                                  'root.bw_mode']
                 grade_changes = ['root.red_gain', 'root.green_gain',
                                  'root.blue_gain', 'root.wb_red',
-                                 'root.wb_green', 'root.wb_blue']
+                                 'root.wb_green', 'root.wb_blue',
+                                 'root.bpc']
                 tonemap_changes = ['root.final_exposure', 'root.tonemap',
                                    'root.slope', 'root.offset', 'root.power',
                                    'root.final_contrast', 'root.lut',
@@ -294,6 +295,10 @@ class ProcessingPipeline(QObject):
             self.grade_inter = density_to_luminance(self.grade_inter)
             if ep.bw_mode:
                 self.grade_inter = convert_to_grayscale_from_g(self.grade_inter)
+            # apply black point compensation
+            self.grade_inter = (self.grade_inter - ep.bpc) / (1 - ep.bpc)
+            restoration_gamma = math.log(0.05) / math.log((0.05 - ep.bpc) / (1 - ep.bpc))
+            self.grade_inter = np.power(self.grade_inter, restoration_gamma)
 
         def proceed():
             self.tonemap_process(preview)
@@ -430,6 +435,10 @@ class ProcessingPipeline(QObject):
             working_image = density_to_luminance(working_image)
             if ep.bw_mode:
                 working_image = convert_to_grayscale_from_g(working_image)
+            # apply black point compensation
+            working_image = (working_image - ep.bpc) / (1 - ep.bpc)
+            restoration_gamma = math.log(0.05) / math.log((0.05 - ep.bpc) / (1 - ep.bpc))
+            working_image = np.power(working_image, restoration_gamma)
             # tonemap
             # ASC CDL
             working_image = linear_to_ACEScct(working_image)
