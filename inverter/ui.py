@@ -239,7 +239,6 @@ class ToolPanel(QWidget):
         custom_grading_layout.addLayout(grading_tune_layout)
         custom_grading_layout.addWidget(self.grading_wb_picker)
         custom_grading_layout.addWidget(self.bpc_slider)
-        custom_grading_layout.addWidget(self.bpc_picker)
         custom_grading_groupbox.setLayout(custom_grading_layout)
         self.tools.extend([self.red_gain_slider,
                            self.green_gain_slider,
