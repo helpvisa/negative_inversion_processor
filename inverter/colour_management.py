@@ -16,13 +16,22 @@
 import sys
 import math
 import numpy as np
-import numpy.typing as npt
 import PyOpenColorIO as ocio
+from functools import partial
 from scipy.ndimage import map_coordinates
 from colour import (RGB_to_XYZ, XYZ_to_RGB, RGB_to_RGB,
                     RGB_COLOURSPACES, CCS_ILLUMINANTS,
-                    cctf_encoding, cctf_decoding, read_LUT)
+                    cctf_encoding, cctf_decoding, read_LUT, models)
 from PIL import ImageCms
+
+
+# create a custom gamma 2.4 Rec.709 colourspace for common LUTs
+rec709_gamma24 = RGB_COLOURSPACES["ITU-R BT.709"].copy()
+rec709_gamma24.name = "Gamma 2.4 Encoded Rec.709"
+rec709_gamma24.cctf_encoding = partial(models.gamma_function, exponent=1 / 2.4)
+rec709_gamma24.cctf_decoding = partial(models.gamma_function, exponent=2.4)
+# register this globally for later recall
+RGB_COLOURSPACES[rec709_gamma24.name] = rec709_gamma24
 
 
 def get_supported_colour_profiles():
