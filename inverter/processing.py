@@ -38,7 +38,7 @@ def load_raw_image(path, fast_mode=False):
         conversion_required = True
     elif path_obj.suffix.lower()[1:] in RAW_EXTENSIONS:
         with rawpy.imread(path) as raw:
-            demosaic_algo = rawpy.DemosaicAlgorithm.AHD
+            demosaic_algo = rawpy.DemosaicAlgorithm.DHT
             half_size = False
             if fast_mode:
                 demosaic_algo = rawpy.DemosaicAlgorithm.LINEAR
