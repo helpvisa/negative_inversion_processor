@@ -19,6 +19,7 @@ import tifffile
 import numpy as np
 from pathlib import Path
 from PIL import Image, ImageCms
+from helpers import determine_m43
 from global_vars import RAW_EXTENSIONS
 
 
@@ -38,6 +39,16 @@ def load_raw_image(path, fast_mode=False):
         conversion_required = True
     elif path_obj.suffix.lower()[1:] in RAW_EXTENSIONS:
         with rawpy.imread(path) as raw:
+            # enable special considerations for m43 sensors
+            is_m43 = determine_m43(path, raw)
+            fbdd_nr_mode = rawpy.FBDDNoiseReductionMode.Off
+            if is_m43:
+                print(f"m43 sensor detected ({is_m43}), using pre-smoothing!",
+                      file=sys.stderr)
+                fbdd_nr_mode = rawpy.FBDDNoiseReductionMode.Off
+            else:
+                print("NOT m43 sensor.",
+                      file=sys.stderr)
             demosaic_algo = rawpy.DemosaicAlgorithm.DHT
             half_size = False
             if fast_mode:
@@ -46,6 +57,7 @@ def load_raw_image(path, fast_mode=False):
             load = raw.postprocess(demosaic_algorithm=demosaic_algo,
                                    use_camera_wb=True,
                                    # user_wb=d65_balance,
+                                   fbdd_noise_reduction=fbdd_nr_mode,
                                    no_auto_bright=True,
                                    half_size=half_size,
                                    output_bps=16,
